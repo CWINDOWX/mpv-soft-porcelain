@@ -194,7 +194,7 @@ end
 
 local function unbind_click()
     if runtime.click_bound then
-        mp.remove_key_binding("chapter-skip-click")
+        mp.disable_key_bindings("chapter_skip_click")
         runtime.click_bound = false
     end
 end
@@ -425,6 +425,11 @@ local function point_in_rect(x, y, r)
     return r and x >= r.ax and x <= r.bx and y >= r.ay and y <= r.by
 end
 
+mp.set_key_bindings({
+    { "MBTN_LEFT", function() end, handle_pill_click },
+    { "MBTN_LEFT_DBL", function() end },
+}, "chapter_skip_click", "force")
+
 local function update_hover(mx, my)
     if not runtime.prompt_visible then
         unbind_click()
@@ -438,7 +443,7 @@ local function update_hover(mx, my)
     end
 
     if zone ~= nil and not runtime.click_bound then
-        mp.add_forced_key_binding("MBTN_LEFT", "chapter-skip-click", handle_pill_click)
+        mp.enable_key_bindings("chapter_skip_click", "")
         runtime.click_bound = true
     elseif zone == nil and runtime.click_bound then
         unbind_click()

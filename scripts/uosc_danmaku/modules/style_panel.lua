@@ -240,9 +240,9 @@ local function norm_to_val(slider, t, allow_snap)
     t = clamp(0, t, 1)
     local eff_t = slider.inverted and (1 - t) or t
     local raw = slider.min + eff_t * (slider.max - slider.min)
-    -- Magnetic snap to nearby curated snap point (within 4.8% of track width)
+    -- Magnetic snap to nearby curated snap point (within 3.6% of track width); otherwise nearest integer/step
     if allow_snap and slider.snaps then
-        local best_snap, best_dist = nil, 0.048
+        local best_snap, best_dist = nil, 0.036
         for _, sp in ipairs(slider.snaps) do
             local st = val_to_norm(slider, sp.val)
             local d = math.abs(t - st)
@@ -255,7 +255,7 @@ local function norm_to_val(slider, t, allow_snap)
             return best_snap
         end
     end
-    -- Quantize cleanly to step
+    -- Quantize cleanly to nearest integer / step
     local stepped = slider.min + math.floor((raw - slider.min) / slider.step + 0.5) * slider.step
     return clamp(slider.min, stepped, slider.max)
 end
@@ -371,9 +371,26 @@ local function render_panel()
             + sec_gap + footer_h + pad
     end
 
-    local bx = w - right_safe
-    local ax = bx - card_w
-    local ay = top_safe + math.floor((avail_h - total_h) / 2)
+    local left_safe = math.floor(w * (mp.get_property_number("video-margin-ratio-left", 0) or 0)) + math.floor(18 * scale)
+    local ax, ay
+    if P.anchor then
+        local gap_x = math.floor(10 * scale)
+        local right_ax = math.floor(P.anchor.x + gap_x)
+        local left_ax = math.floor(P.anchor.x - gap_x - card_w)
+        -- Right of cursor if room allows; else flip left cleanly
+        if right_ax + card_w <= w - right_safe then
+            ax = math.max(left_safe, right_ax)
+        elseif left_ax >= left_safe then
+            ax = math.min(w - right_safe - card_w, left_ax)
+        else
+            ax = math.floor(clamp(left_safe, P.anchor.x - card_w / 2, math.max(left_safe, w - right_safe - card_w)))
+        end
+        ay = math.floor(clamp(top_safe, P.anchor.y - total_h / 2, math.max(top_safe, h - bot_safe - total_h)))
+    else
+        ax = w - right_safe - card_w
+        ay = top_safe + math.floor((avail_h - total_h) / 2)
+    end
+    local bx = ax + card_w
     local by = ay + total_h
     local card_r = math.floor(14 * scale)
 
@@ -502,7 +519,7 @@ local function render_panel()
 
         -- Generous interactive hitbox for easy dragging & wheel nudging
         local hit_rect = {
-            ax = cx1, ay = y + math.floor(14 * scale),
+            ax = cx1, ay = y + math.floor(4 * scale),
             bx = cx2, by = y + slider_row_h - math.floor(2 * scale),
             tr_ax = tr_ax, tr_bx = tr_bx,
         }
@@ -660,30 +677,56 @@ local function find_hitbox(mx, my)
     return nil
 end
 
-local function on_left_btn(info)
+local function stop_drag_poll()
+    if P.drag_timer then
+        P.drag_timer:kill()
+        P.drag_timer = nil
+    end
+end
+
+local function on_left_down()
     if not P.open then return end
-    if info.event == "down" then
-        if not pt_in(P.mx, P.my, P.card_rect) then
-            close_danmaku_style_panel()
-            return
-        end
-        local hb = find_hitbox(P.mx, P.my)
-        if not hb then return end
-        if hb.kind == "slider" then
-            P.dragging = hb.slider
-            P.drag_rect = hb.rect
-            update_slider_from_x(hb.slider, hb.rect, P.mx)
-        elseif hb.kind == "button" and hb.on_click then
-            hb.on_click()
-        end
-    elseif info.event == "up" then
-        if P.dragging then
-            local sl = P.dragging
-            P.dragging = nil
-            P.drag_rect = nil
-            schedule_apply(sl.rebuild, true)
-            render_panel()
-        end
+    local pos = mp.get_property_native("mouse-pos")
+    if type(pos) == "table" and pos.x and pos.y then
+        P.mx, P.my = pos.x, pos.y
+    end
+    if not pt_in(P.mx, P.my, P.card_rect) then
+        close_danmaku_style_panel()
+        return
+    end
+    local hb = find_hitbox(P.mx, P.my)
+    if not hb then return end
+    if hb.kind == "slider" then
+        P.dragging = hb.slider
+        P.drag_rect = hb.rect
+        update_slider_from_x(hb.slider, hb.rect, P.mx)
+        stop_drag_poll()
+        -- Active 60Hz drag poll guarantees continuous silky sliding even if OS batches events
+        P.drag_timer = mp.add_periodic_timer(1 / 60, function()
+            if not P.open or not P.dragging or not P.drag_rect then
+                stop_drag_poll()
+                return
+            end
+            local cur = mp.get_property_native("mouse-pos")
+            if type(cur) == "table" and cur.x and cur.y then
+                P.mx, P.my = cur.x, cur.y
+                update_slider_from_x(P.dragging, P.drag_rect, cur.x)
+            end
+        end)
+    elseif hb.kind == "button" and hb.on_click then
+        hb.on_click()
+    end
+end
+
+local function on_left_up()
+    stop_drag_poll()
+    if not P.open then return end
+    if P.dragging then
+        local sl = P.dragging
+        P.dragging = nil
+        P.drag_rect = nil
+        schedule_apply(sl.rebuild, true)
+        render_panel()
     end
 end
 
@@ -695,21 +738,26 @@ local function on_wheel(dir)
     end
 end
 
+-- Dedicated forced key section with EMPTY flags ("") to disable mpv `allow-vo-dragging`
+-- so holding MBTN_LEFT slides smoothly instead of dragging the window!
+mp.set_key_bindings({
+    { "MBTN_LEFT",     on_left_up, on_left_down },
+    { "MBTN_LEFT_DBL", function() end },
+    { "WHEEL_UP",      function() on_wheel(1) end },
+    { "WHEEL_DOWN",    function() on_wheel(-1) end },
+    { "ESC",           function() close_danmaku_style_panel() end },
+}, "dm_style_panel", "force")
+
 local function bind_panel_keys()
-    if P.keys_bound then return end
-    mp.add_forced_key_binding("MBTN_LEFT", "dm-style-panel-lbtn", on_left_btn, { complex = true })
-    mp.add_forced_key_binding("WHEEL_UP", "dm-style-panel-wup", function() on_wheel(1) end)
-    mp.add_forced_key_binding("WHEEL_DOWN", "dm-style-panel-wdown", function() on_wheel(-1) end)
-    mp.add_forced_key_binding("ESC", "dm-style-panel-esc", function() close_danmaku_style_panel() end)
+    mp.enable_key_bindings("dm_style_panel", "")
     P.keys_bound = true
 end
 
 local function unbind_panel_keys()
+    stop_drag_poll()
+    if P.raise_timer then P.raise_timer:kill(); P.raise_timer = nil end
     if not P.keys_bound then return end
-    mp.remove_key_binding("dm-style-panel-lbtn")
-    mp.remove_key_binding("dm-style-panel-wup")
-    mp.remove_key_binding("dm-style-panel-wdown")
-    mp.remove_key_binding("dm-style-panel-esc")
+    mp.disable_key_bindings("dm_style_panel")
     P.keys_bound = false
 end
 
@@ -719,6 +767,7 @@ function close_danmaku_style_panel(instant)
     P.dragging = nil
     P.drag_rect = nil
     P.hover_id = nil
+    P.anchor = nil
     unbind_panel_keys()
     if uosc_available then
         mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "")
@@ -750,13 +799,27 @@ function open_danmaku_style_panel()
         close_danmaku_style_panel()
         return
     end
+    local pos = mp.get_property_native("mouse-pos")
+    if type(pos) == "table" and pos.hover and pos.x and pos.y and pos.x >= 0 and pos.y >= 0 then
+        P.mx, P.my = pos.x, pos.y
+        P.anchor = { x = pos.x, y = pos.y }
+    else
+        P.anchor = nil
+    end
     if uosc_available then
         mp.commandv("script-message-to", "uosc", "close-menu")
-        mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "volume,controls,timeline")
+        mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "volume,controls,timeline,speed")
     end
     P.open = true
     P.dragging = nil
+    P.in_card = false
     bind_panel_keys()
+    -- Re-promote key section once after uosc finishes closing any prior menu
+    if P.raise_timer then P.raise_timer:kill() end
+    P.raise_timer = mp.add_timeout(0.06, function()
+        P.raise_timer = nil
+        if P.open then bind_panel_keys() end
+    end)
     if P.fade_timer then P.fade_timer:kill() end
 
     local t0 = mp.get_time()
@@ -784,6 +847,13 @@ mp.observe_property("mouse-pos", "native", function(_, pos)
     if type(pos) ~= "table" or not pos.x or not pos.y then return end
     P.mx, P.my = pos.x, pos.y
     if not P.open then return end
+    local inside = pt_in(P.mx, P.my, P.card_rect)
+    if inside and not P.in_card then
+        P.in_card = true
+        bind_panel_keys()
+    elseif not inside and P.in_card then
+        P.in_card = false
+    end
     if P.dragging and P.drag_rect then
         update_slider_from_x(P.dragging, P.drag_rect, P.mx)
         return

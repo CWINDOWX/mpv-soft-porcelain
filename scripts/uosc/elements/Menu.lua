@@ -134,6 +134,17 @@ function Menu:init(data, callback, opts)
 	self.is_closing = false
 	self.drag_last_y = nil
 	self.is_dragging = false
+	self.submenu_dir = 1 -- 1 = right, -1 = left
+
+	-- Capture mouse anchor so right-click and bottom-bar menus pop up right where the user clicked
+	local mpos = mp.get_property_native('mouse-pos')
+	local cx = (mpos and mpos.hover and mpos.x) or (not cursor.hidden and cursor.x) or nil
+	local cy = (mpos and mpos.hover and mpos.y) or (not cursor.hidden and cursor.y) or nil
+	if cx and cy and cx >= 0 and cx <= display.width and cy >= 0 and cy <= display.height then
+		self.anchor = {x = cx, y = cy}
+	else
+		self.anchor = nil
+	end
 
 	if utils.shared_script_property_set then
 		utils.shared_script_property_set('uosc-menu-type', self.type or 'undefined')
@@ -329,15 +340,45 @@ function Menu:update_content_dimensions()
 	self:update_dimensions()
 end
 
+function Menu:get_viewport_bounds()
+	local wb = Elements:v('window_border', 'size', 0)
+	local vp = Elements:v('window_border', 'viewport')
+	local pad = round(10 * state.scale)
+	return {
+		ax = (vp and vp.ax or wb) + pad,
+		ay = (vp and vp.ay or wb) + pad,
+		bx = (vp and vp.bx or (display.width - wb)) - pad,
+		by = (vp and vp.by or (display.height - wb)) - pad,
+	}
+end
+
+function Menu:get_base_ax(menu)
+	local card_w = menu.width + self.padding * 2
+	if not self.anchor then
+		return round((display.width - card_w) / 2)
+	end
+	local vp = self:get_viewport_bounds()
+	local gap_x = round(6 * state.scale)
+	local right_ax = round(self.anchor.x + gap_x)
+	local left_ax = round(self.anchor.x - gap_x - card_w)
+	-- Open to the right of cursor if space allows; otherwise flip cleanly to the left
+	if right_ax + card_w <= vp.bx then
+		return math.max(vp.ax, right_ax)
+	elseif left_ax >= vp.ax then
+		return math.min(vp.bx - card_w, left_ax)
+	else
+		return round(clamp(vp.ax, self.anchor.x - card_w / 2, math.max(vp.ax, vp.bx - card_w)))
+	end
+end
+
 function Menu:update_dimensions()
 	-- Coordinates and sizes are of the scrollable area. Title is rendered
 	-- above it, so we need to account for that in max_height and ay position.
-	-- This is a debt from an era where we had different cursor event handling,
-	-- and dumb titles with no search inputs. It could use a refactor.
+	local vp = self:get_viewport_bounds()
 	local margin = round(self.item_height / 2)
-	local external_buttons_reserve = display.width / self.item_height > 14 and self.scroll_step * 6 - margin * 2 or 0
-	local width_available = display.width - margin * 2 - self.padding * 2 - external_buttons_reserve
-	local height_available = display.height - margin * 2 - self.padding * 2
+	local external_buttons_reserve = display.width / self.item_height > 14 and self.scroll_step * 3 or 0
+	local width_available = math.max(200, (vp.bx - vp.ax) - self.padding * 2 - external_buttons_reserve)
+	local height_available = math.max(160, (vp.by - vp.ay) - self.padding * 2)
 	local min_width = math.min(self.min_width, width_available)
 
 	for _, menu in ipairs(self.all) do
@@ -346,14 +387,38 @@ function Menu:update_dimensions()
 		local title_height = (menu.is_root and menu.title or menu.search) and
 			self.scroll_step + self.separator_size + 1 or 0
 		local footnote_height = self.font_size * 1.5
-		local max_height = height_available - title_height - footnote_height
+		local max_height = math.max(self.scroll_step, height_available - title_height - footnote_height)
 		local content_height = self.scroll_step * #menu.items
 		menu.height = math.min(content_height - self.item_spacing, max_height)
-		menu.top = clamp(
-			title_height + margin + self.padding,
-			menu.search and math.min(menu.search.min_top, menu.search.source.top) or height_available,
-			round((height_available - menu.height + title_height) / 2)
-		)
+
+		local card_h = title_height + menu.height + self.padding * 2
+		if self.anchor then
+			local gap_y = round(8 * state.scale)
+			local card_top
+			if self.anchor.y + gap_y + card_h + footnote_height <= vp.by then
+				-- Enough space below cursor: open downward
+				card_top = self.anchor.y + gap_y
+			elseif self.anchor.y - gap_y - card_h >= vp.ay then
+				-- Clicked near bottom (e.g. bottom control bar): open cleanly upward above cursor
+				card_top = self.anchor.y - gap_y - card_h
+			else
+				-- Tall menu: anchor smoothly clamped inside viewport
+				card_top = vp.by - card_h - footnote_height
+			end
+			card_top = clamp(vp.ay, card_top, math.max(vp.ay, vp.by - card_h - footnote_height))
+			local next_top = round(card_top + title_height + self.padding)
+			if menu.search then
+				next_top = clamp(vp.ay + title_height + self.padding, math.min(menu.search.min_top, menu.search.source.top), next_top)
+			end
+			menu.top = next_top
+		else
+			menu.top = clamp(
+				vp.ay + title_height + self.padding,
+				menu.search and math.min(menu.search.min_top, menu.search.source.top) or height_available,
+				round(vp.ay + (height_available - menu.height + title_height) / 2)
+			)
+		end
+
 		if menu.search then
 			menu.search.min_top = math.min(menu.search.min_top, menu.top)
 			menu.search.max_width = math.max(menu.search.max_width, menu.width)
@@ -367,7 +432,7 @@ end
 
 -- Updates element coordinates to match padding box of currently open (sub)menu.
 function Menu:update_coordinates()
-	local ax = round((display.width - self.current.width) / 2 - self.padding) + self.offset_x
+	local ax = self:get_base_ax(self.current) + self.offset_x
 	self:set_coordinates(
 		ax, self.current.top - self.padding,
 		ax + self.current.width + self.padding * 2, self.current.top + self.current.height + self.padding
@@ -610,7 +675,8 @@ function Menu:slide_in_menu(id, x)
 	local menu = self:get_menu(id)
 	if not menu then return end
 	self:activate_menu(id)
-	self:tween(-(display.width / 2 - menu.width / 2 - x), 0, function(offset) self:set_offset_x(offset) end)
+	local target_ax = self:get_base_ax(menu)
+	self:tween(x - target_ax, 0, function(offset) self:set_offset_x(offset) end)
 	self.opacity = 1 -- in case tween above canceled fade in animation
 end
 
@@ -621,7 +687,8 @@ function Menu:back()
 	local parent = current.parent_menu
 
 	if parent then
-		self:slide_in_menu(parent.id, display.width / 2 - current.width / 2 - parent.width / 2 + self.offset_x)
+		local from_x = parent.drawn_x or (self.ax - parent.width - self.padding * 2 - self.gap)
+		self:slide_in_menu(parent.id, from_x)
 	else
 		self.callback({type = 'back'})
 	end
@@ -638,8 +705,12 @@ function Menu:activate_selected_item(shortcut, is_pointer)
 			if not self.mouse_nav then
 				self:select_index(1, item.id)
 			end
+			local prev_ax, prev_bx = self.ax, self.bx
+			local sub_card_w = item.width + self.padding * 2
+			local start_x = self.submenu_dir == -1 and (prev_ax - self.gap - sub_card_w) or (prev_bx + self.gap)
 			self:activate_menu(item.id)
-			self:tween(self.offset_x + menu.width / 2, 0, function(offset) self:set_offset_x(offset) end)
+			local target_ax = self:get_base_ax(item)
+			self:tween(start_x - target_ax, 0, function(offset) self:set_offset_x(offset) end)
 			self.opacity = 1 -- in case tween above canceled fade in animation
 		else
 			local actions = item.actions or menu.item_actions
@@ -1380,14 +1451,16 @@ function Menu:render()
 	---@param menu MenuStack
 	---@param x number
 	---@param pos number Horizontal position index. 0 = current menu, <0 parent menus, >1 submenu.
-	local function draw_menu(menu, x, pos)
+	---@param width_override? number Optional capped content width so side submenus never overlap or clip.
+	local function draw_menu(menu, x, pos, width_override)
 		local is_current, is_parent, is_submenu = pos == 0, pos < 0, pos > 0
 		local menu_opacity = (pos == 0 and 1 or config.opacity.submenu ^ math.abs(pos)) * self.opacity
+		local draw_width = width_override or menu.width
 		-- Scrollable content area coordinates
 		local content_rect = {
 			ax = x + self.padding,
 			ay = menu.top,
-			bx = x + self.padding + menu.width,
+			bx = x + self.padding + draw_width,
 			by = menu.top + menu.height,
 		}
 		-- local ax, ay, bx, by = x + self.padding, menu.top, x + menu.width + self.padding, menu.top + menu.height
@@ -1443,11 +1516,32 @@ function Menu:render()
 			})
 		end
 
-		-- Draw submenu if selected
+		-- Draw submenu if selected (open right if room allows, else flip left with zero overlap!)
 		local submenu_rect, current_item = nil, is_current and menu.selected_index and menu.items[menu.selected_index]
 		local submenu_is_hovered = false
+		local sub_dir = 1
 		if current_item and current_item.items then
-			submenu_rect = draw_menu(current_item --[[@as MenuStack]], bg_rect.bx + self.gap, 1)
+			local vp = self:get_viewport_bounds()
+			local sub_w = current_item.width
+			local sub_card_w = sub_w + self.padding * 2
+			local right_room = vp.bx - (bg_rect.bx + self.gap)
+			local left_room = (bg_rect.ax - self.gap) - vp.ax
+			local sub_x
+			if right_room >= sub_card_w or (right_room >= left_room) then
+				sub_dir = 1
+				if right_room < sub_card_w then
+					sub_w = math.max(140, right_room - self.padding * 2)
+				end
+				sub_x = bg_rect.bx + self.gap
+			else
+				sub_dir = -1
+				if left_room < sub_card_w then
+					sub_w = math.max(140, left_room - self.padding * 2)
+				end
+				sub_x = bg_rect.ax - self.gap - (sub_w + self.padding * 2)
+			end
+			self.submenu_dir = sub_dir
+			submenu_rect = draw_menu(current_item --[[@as MenuStack]], sub_x, 1, sub_w)
 			cursor:zone('primary_down', submenu_rect, self:create_action(function(shortcut)
 				self:activate_selected_item(shortcut, true)
 			end))
@@ -1468,9 +1562,9 @@ function Menu:render()
 				content_rect.bx - self.item_padding
 			local is_selected = menu.selected_index == index
 			local item_rect_hitbox = {
-				ax = content_rect.ax,
+				ax = content_rect.ax - ((item.items and sub_dir == -1) and (self.padding + self.gap) or 0),
 				ay = math.max(item_ay, bg_rect.ay),
-				bx = bg_rect.bx + (item.items and self.gap or -self.padding), -- to bridge the submenu gap with cursor
+				bx = bg_rect.bx + ((item.items and sub_dir == 1) and self.gap or -self.padding), -- bridge submenu gap
 				by = math.min(item_ay + self.scroll_step, bg_rect.by),
 			}
 
@@ -1827,13 +1921,24 @@ function Menu:render()
 	-- Active menu
 	draw_menu(self.current, self.ax, 0)
 
-	-- Parent menus
+	-- Parent menus (place on left if room, else flip to right so parent stays clickable)
+	local vp_bounds = self:get_viewport_bounds()
 	local parent_menu = self.current.parent_menu
-	local parent_offset_x, parent_horizontal_index = self.ax, -1
+	local parent_left_edge, parent_right_edge = self.ax, self.bx
+	local parent_horizontal_index = -1
 
 	while parent_menu do
-		parent_offset_x = parent_offset_x - parent_menu.width - self.padding * 2 - self.gap
-		draw_menu(parent_menu, parent_offset_x, parent_horizontal_index)
+		local p_card_w = parent_menu.width + self.padding * 2
+		local px
+		if parent_left_edge - p_card_w - self.gap >= vp_bounds.ax then
+			px = parent_left_edge - p_card_w - self.gap
+			parent_left_edge = px
+		else
+			px = parent_right_edge + self.gap
+			parent_right_edge = px + p_card_w
+		end
+		parent_menu.drawn_x = px
+		draw_menu(parent_menu, px, parent_horizontal_index)
 		parent_horizontal_index = parent_horizontal_index - 1
 		parent_menu = parent_menu.parent_menu
 	end

@@ -1,9 +1,12 @@
 # Runtime caches and local state
 _cache/
+__pycache__/
+*.pyc
 *.log
 *.tmp
 danmaku-history.json
 danmaku-ass/
+saved-props.json
 saved-shader-preset.json
 saved-danmaku-style.json
 saved-chapter-skip.json

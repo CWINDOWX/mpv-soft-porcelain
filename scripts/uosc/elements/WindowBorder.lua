@@ -89,17 +89,9 @@ function WindowBorder:render()
 		opacity = 1,
 	})
 
-	-- Delicate inner rim tracing the rounded video viewport cleanly
-	if vp.radius > 0 then
-		ass:rect(vp.ax, vp.ay, vp.bx, vp.by, {
-			color = bg,
-			border = 1,
-			border_color = bgt,
-			radius = vp.radius,
-			opacity = {main = 0, border = 0.16},
-		})
-	else
-		ass:rect(0, vp.ay - 1, w, vp.ay, {color = bgt, opacity = 0.14})
+	-- Subtle separator line below persistent top bar only when unrounded (maximized)
+	if vp.radius <= 0 then
+		ass:rect(0, vp.ay - 1, w, vp.ay, {color = bgt, opacity = 0.12})
 	end
 
 	-- Subtle outer edge hairline framing the window against bright wallpapers

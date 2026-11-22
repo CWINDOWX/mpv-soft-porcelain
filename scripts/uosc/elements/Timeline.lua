@@ -54,21 +54,23 @@ function Timeline:get_is_hovered() return self.enabled and self.is_hovered end
 
 function Timeline:update_dimensions()
 	self.size = round(options.timeline_size * state.scale)
-	self.top_border = round(options.timeline_border * state.scale)
+	self.top_border = 0
 	self.line_width = round(options.timeline_line_width * state.scale)
 	self.progress_line_width = round(options.progress_line_width * state.scale)
 	self.font_size = math.floor(math.min((self.size + 60 * state.scale) * 0.2, self.size * 0.96) * options.font_scale)
 	local window_border_size = Elements:v('window_border', 'size', 0)
-	self.ax = window_border_size
-	self.ay = display.height - window_border_size - self.size - self.top_border
-	self.bx = display.width - window_border_size
-	self.by = display.height - window_border_size
-	self.width = self.bx - self.ax
+	local inset_x = round(8 * state.scale)
+	local inset_b = round(8 * state.scale)
+	self.ax = window_border_size + inset_x
+	self.bx = display.width - window_border_size - inset_x
+	self.by = display.height - window_border_size - inset_b
+	self.ay = self.by - self.size
+	self.width = math.max(1, self.bx - self.ax)
 	self.chapter_size = math.max((self.by - self.ay) / 10, 3)
 	self.chapter_size_hover = self.chapter_size * 2
 
 	-- Disable if not enough space
-	local available_space = display.height - window_border_size * 2 - Elements:v('top_bar', 'size', 0)
+	local available_space = display.height - window_border_size * 2 - inset_b - Elements:v('top_bar', 'size', 0)
 	self.obstructed = available_space < self.size + 10
 	self:decide_enabled()
 end
@@ -218,14 +220,15 @@ function Timeline:render()
 	local tooltip_gap = round(2 * state.scale)
 	local timestamp_gap = tooltip_gap
 
-	local spacing = math.max(math.floor((self.size - self.font_size) / 2.5), 4)
+	local spacing = math.max(math.floor((self.size - self.font_size) / 2.5), round(12 * state.scale))
 	local progress = state.time / state.duration
 	local is_line = options.timeline_style == 'line'
 
-	-- Foreground & Background bar coordinates
-	local bax, bay, bbx, bby = self.ax, self.by - size - self.top_border, self.bx, self.by
-	local fax, fay, fbx, fby = 0, bay + self.top_border, 0, bby
+	-- Floating rounded porcelain capsule coordinates (aligned cleanly with floating Controls dock)
+	local bax, bay, bbx, bby = self.ax, self.by - size, self.bx, self.by
+	local fax, fay, fbx, fby = 0, bay, 0, bby
 	local fcy = fay + (size / 2)
+	local pill_r = math.min(state.radius, size / 2)
 
 	local line_width = 0
 
@@ -241,7 +244,7 @@ function Timeline:render()
 	end
 
 	local foreground_size = fby - fay
-	local foreground_coordinates = round(fax) .. ',' .. fay .. ',' .. round(fbx) .. ',' .. fby -- for clipping
+	local foreground_coordinates = round(fax) .. ',' .. round(fay) .. ',' .. round(fbx) .. ',' .. round(fby) -- for clipping
 
 	-- time starts 0.5 pixels in
 	local time_ax = bax + 0.5
@@ -253,34 +256,42 @@ function Timeline:render()
 		return time <= state.time and x or x + line_width
 	end
 
-	-- Clip timeline seamlessly into rounded inner video viewport when framed
-	local vp = Elements:v('window_border', 'viewport')
-	local vp_clip = ''
-	if vp and vp.radius and vp.radius > 0 then
-		local cpath = assdraw.ass_new()
-		cpath:round_rect_cw(vp.ax, vp.ay, vp.bx, vp.by, vp.radius)
-		vp_clip = '\\clip(' .. cpath.scale .. ', ' .. cpath.text .. ')'
+	-- Clip inner progress & overlays cleanly into the timeline's own smooth rounded pill
+	local pill_path = assdraw.ass_new()
+	if pill_r > 0 then
+		pill_path:round_rect_cw(bax, bay, bbx, bby, pill_r)
+	else
+		pill_path:rect_cw(bax, bay, bbx, bby)
 	end
+	local pill_clip = '\\clip(' .. pill_path.scale .. ', ' .. pill_path.text .. ')'
 
-	-- Background
-	ass:new_event()
-	ass:pos(0, 0)
-	ass:append('{\\rDefault\\an7\\blur0\\bord0\\1c&H' .. bg .. vp_clip .. '}')
-	ass:opacity(config.opacity.timeline)
-	ass:draw_start()
-	ass:rect_cw(bax, bay, fax, bby) --left of progress
-	ass:rect_cw(fbx, bay, bbx, bby) --right of progress
-	ass:rect_cw(fax, bay, fbx, fay) --above progress
-	ass:draw_stop()
-
-	-- Crisp 1px top hairline boundary separating timeline bar from video
+	-- Soft elevation shadow matching floating Controls dock when expanded
 	if visibility > 0 then
-		ass:rect(bax, bay, bbx, bay + 1, {color = bgt, opacity = visibility * 0.16, clip = vp_clip ~= '' and vp_clip or nil})
+		ass:rect(bax, bay + round(2 * state.scale), bbx, bby + round(3 * state.scale), {
+			color = bgt,
+			opacity = visibility * 0.09,
+			radius = pill_r,
+		})
 	end
+
+	-- Full-width smooth rounded porcelain track (drawn whole so zero AA seam at corners!)
+	local track_opacity = 0.52 + (math.max(config.opacity.timeline, 0.94) - 0.52) * visibility
+	ass:rect(bax, bay, bbx, bby, {
+		color = bg,
+		opacity = track_opacity,
+		radius = pill_r,
+	})
 
 	-- Progress
 	local function draw_progress()
-		ass:rect(fax, fay, fbx, fby, {opacity = config.opacity.position, clip = vp_clip ~= '' and vp_clip or nil})
+		if fbx > fax then
+			local pos_opacity = (0.90 + (1.0 - 0.90) * visibility) * config.opacity.position
+			ass:rect(fax, fay, fbx, fby, {
+				color = fg,
+				opacity = pos_opacity,
+				clip = pill_clip,
+			})
+		end
 	end
 
 	-- Youtube heatmap
@@ -328,7 +339,7 @@ function Timeline:render()
 		local rax = chapter_range.start < 0.1 and bax or t2x(chapter_range.start)
 		local rbx = chapter_range['end'] > state.duration - 0.1 and bbx
 			or t2x(math.min(chapter_range['end'], state.duration))
-		ass:rect(rax, fay, rbx, fby, {color = chapter_range.color, opacity = chapter_range.opacity})
+		ass:rect(rax, fay, rbx, fby, {color = chapter_range.color, opacity = chapter_range.opacity, clip = pill_clip})
 	end
 
 	-- Chapters
@@ -471,7 +482,7 @@ function Timeline:render()
 		-- 0.5 to switch when the pixel is half filled in
 		local color = ((fax - 0.5) < cursor_x and cursor_x < (fbx + 0.5)) and bg or fg
 		local ax, ay, bx, by = cursor_x - 0.5, fay, cursor_x + 0.5, fby
-		ass:rect(ax, ay, bx, by, {color = color, opacity = 0.33})
+		ass:rect(ax, ay, bx, by, {color = color, opacity = 0.33, clip = pill_clip})
 		local tooltip_anchor = {ax = ax, ay = ay - self.top_border, bx = bx, by = by}
 
 		-- Timestamp

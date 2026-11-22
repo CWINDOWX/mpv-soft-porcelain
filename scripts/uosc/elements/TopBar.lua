@@ -342,9 +342,6 @@ function TopBar:update_dimensions()
 	if self.render_titles.alt and options.top_bar_alt_title_place == 'below' then
 		min_hitbox_height = min_hitbox_height + self.title_spacing + self.alt_title_size
 	end
-	if self.current_chapter then
-		min_hitbox_height = min_hitbox_height + self.title_spacing + self.chapter_size
-	end
 	self.ax = window_border_size
 	self.ay = top_ay
 	self.bx = display.width - window_border_size
@@ -364,13 +361,8 @@ function TopBar:toggle_title()
 	self:update_render_titles()
 end
 
-function TopBar:on_prop_time()
-	self:select_current_chapter()
-end
-
-function TopBar:on_prop_chapters()
-	self:select_current_chapter()
-end
+function TopBar:on_prop_time() end
+function TopBar:on_prop_chapters() end
 
 function TopBar:on_prop_border()
 	self:decide_enabled()
@@ -569,7 +561,7 @@ function TopBar:render()
 				if is_title_hover and self.recognized_title then
 					ass:tooltip(title_rect, is_recognized_view and '切换文件名' or '切换番剧名', {
 						align = 2,
-						offset = round(6 * state.scale),
+						offset = round(10 * state.scale),
 					})
 				end
 
@@ -599,65 +591,6 @@ function TopBar:render()
 				local x = align == 6 and bx - padding or ax + padding
 				ass:txt(x, title_ay + self.alt_title_size / 2, align, alt_title, opts)
 				title_ay = by + self.title_spacing
-			end
-
-			-- Current chapter (only show below persistent header on hover/flash so video stays unobstructed)
-			local show_chapter_pill = (not is_framed) or self.proximity > 0 or (self.forced_visibility and self.forced_visibility > 0)
-			if self.current_chapter and show_chapter_pill then
-				local padding_half = round(padding / 2)
-				local prefix, postfix = left_aligned and '' or '└ ', left_aligned and ' ┘' or ''
-				local text = prefix .. self.current_chapter.index .. ': ' .. self.current_chapter.title .. postfix
-				local next_chapter = state.chapters[self.current_chapter.index + 1]
-				local chapter_end = next_chapter and next_chapter.time or state.duration or 0
-				local remaining_time = ((state.time or 0) - chapter_end) /
-					(options.destination_time == 'time-remaining' and 1 or state.speed)
-				local remaining_human = format_time(remaining_time, math.abs(remaining_time))
-				local opts = {
-					size = round(self.chapter_size * 0.77),
-					italic = true,
-					wrap = 2,
-					color = bgt,
-					border = options.text_border * state.scale,
-					border_color = bg,
-					opacity = visibility * 0.8,
-				}
-				local remaining_width = timestamp_width(remaining_human, opts)
-				local remaining_box_width = remaining_width + padding_half * 2
-
-				-- Title
-				local max_bx = title_bx - remaining_box_width - self.title_spacing
-				local rect_ideal_width = round(text_width(text, opts) + padding * 2)
-				local rect_width = math.min(rect_ideal_width, max_bx - title_ax)
-				local ax = left_aligned and title_bx - rect_width or title_ax
-				local rect = {
-					ax = ax,
-					ay = title_ay,
-					bx = ax + rect_width,
-					by = title_ay + self.chapter_size,
-				}
-				opts.clip = string.format('\\clip(%d, %d, %d, %d)', title_ax, title_ay, rect.bx, rect.by)
-				ass:rect(rect.ax, rect.ay, rect.bx, rect.by, {
-					color = bg, opacity = visibility * config.opacity.title, radius = state.radius,
-				})
-				local align = left_aligned and rect_ideal_width == rect_width and 6 or 4
-				local x = align == 6 and rect.bx - padding or rect.ax + padding
-				ass:txt(x, rect.ay + self.chapter_size / 2, align, text, opts)
-
-				-- Time
-				local time_ax = left_aligned
-					and rect.ax - self.title_spacing - remaining_box_width or rect.bx + self.title_spacing
-				local time_bx = time_ax + remaining_box_width
-				opts.clip = nil
-				ass:rect(time_ax, rect.ay, time_bx, rect.by, {
-					color = bg, opacity = visibility * config.opacity.title, radius = state.radius,
-				})
-				ass:txt(time_ax + padding_half, rect.ay + self.chapter_size / 2, 4, remaining_human, opts)
-
-				-- Click action
-				rect.bx = time_bx
-				cursor:zone('primary_down', rect, function() mp.command('script-binding uosc/chapters') end)
-
-				title_ay = rect.by + self.title_spacing
 			end
 		end
 		self.title_by = title_ay - 1

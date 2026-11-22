@@ -40,7 +40,8 @@ local state = {
     episode = nil,
     synced = false,
     prompted = false,
-    busy = false
+    busy = false,
+    search_seq = 0
 }
 
 local function load_prefs()
@@ -211,45 +212,84 @@ local function mark_current_watched()
     end)
 end
 
-local function open_search_menu(initial_query)
-    local query = initial_query or state.subject_name or mp.get_property("filename/no-ext") or ""
-    local items = {}
+local function build_search_menu(query, list, footnote_text)
+    return {
+        type = "bgm_search_menu",
+        title = "搜索并关联 Bangumi 番剧",
+        search_style = "palette",
+        search_debounce = "submit",
+        search_suggestion = query or "",
+        on_search = { "script-message-to", "bangumi_sync", "do-search" },
+        footnote = footnote_text or "输入番剧名按 Enter 搜索；选中后将自动记住当前文件夹",
+        items = list
+    }
+end
 
-    local function send_menu(list, footnote_text)
-        local menu = {
-            type = "bgm_search_menu",
-            title = "搜索并关联 Bangumi 番剧",
-            search_style = "palette",
-            search_suggestion = query,
-            search_submit = true,
-            on_search = { "script-message-to", "bangumi_sync", "do-search" },
-            footnote = footnote_text or "输入番剧名按 Enter 搜索；选中后将自动记住当前文件夹",
-            items = list
-        }
-        mp.commandv("script-message-to", "uosc", "open-menu", utils.format_json(menu))
+local function execute_search(query, skip_spinner)
+    query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    state.search_seq = state.search_seq + 1
+    local seq = state.search_seq
+
+    if query == "" then
+        mp.commandv("script-message-to", "uosc", "update-menu", utils.format_json(
+            build_search_menu("", { { title = "请输入番剧名称后按 Enter 搜索", selectable = false, muted = true, italic = true } })
+        ))
+        return
     end
 
+    if not skip_spinner then
+        mp.commandv("script-message-to", "uosc", "update-menu", utils.format_json(
+            build_search_menu(query, { { icon = "spinner", title = "正在搜索 Bangumi…", selectable = false, muted = true, italic = true } })
+        ))
+    end
+
+    run_cli({ "search", query }, function(res)
+        -- Ignore stale results if user already started a newer search
+        if seq ~= state.search_seq then return end
+        if not res.ok then
+            mp.commandv("script-message-to", "uosc", "update-menu", utils.format_json(
+                build_search_menu(query, { { title = "搜索失败：" .. tostring(res.error or "网络异常，请按 Enter 重试"), selectable = false, muted = true } })
+            ))
+            return
+        end
+        if not res.items or #res.items == 0 then
+            mp.commandv("script-message-to", "uosc", "update-menu", utils.format_json(
+                build_search_menu(query, { { title = "未找到相关番剧，请换个关键词按 Enter 搜索", selectable = false, muted = true } })
+            ))
+            return
+        end
+        local items = {}
+        for _, s in ipairs(res.items) do
+            local hint = (s.date ~= "" and s.date or "") .. (s.eps and s.eps > 0 and (" · " .. s.eps .. "话") or "")
+            local display_name = (s.name_cn and s.name_cn ~= "") and s.name_cn or s.name
+            table.insert(items, {
+                title = display_name,
+                hint = hint,
+                icon = (state.subject_id == s.id) and "check_circle" or "movie",
+                active = (state.subject_id == s.id),
+                value = { "script-message-to", "bangumi_sync", "bind-subject", tostring(s.id), display_name }
+            })
+        end
+        mp.commandv("script-message-to", "uosc", "update-menu", utils.format_json(
+            build_search_menu(query, items)
+        ))
+    end)
+end
+
+local function open_search_menu(initial_query)
+    local query = initial_query or state.subject_name or mp.get_property("filename/no-ext") or ""
+    query = tostring(query):gsub("^%s+", ""):gsub("%s+$", "")
+
+    local initial_items = query ~= ""
+        and { { icon = "spinner", title = "正在搜索 Bangumi…", selectable = false, muted = true, italic = true } }
+        or { { title = "请输入番剧名称后按 Enter 搜索", selectable = false, muted = true, italic = true } }
+
+    mp.commandv("script-message-to", "uosc", "open-menu", utils.format_json(
+        build_search_menu(query, initial_items)
+    ))
+
     if query ~= "" then
-        send_menu({ { title = "正在搜索 Bangumi…", selectable = false, muted = true, italic = true } })
-        run_cli({ "search", query }, function(res)
-            if not res.ok or not res.items or #res.items == 0 then
-                send_menu({ { title = "未找到相关番剧，请换个关键词按 Enter 搜索", selectable = false, muted = true } })
-                return
-            end
-            for _, s in ipairs(res.items) do
-                local hint = (s.date ~= "" and s.date or "") .. (s.eps and s.eps > 0 and (" · " .. s.eps .. "话") or "")
-                table.insert(items, {
-                    title = s.name_cn ~= "" and s.name_cn or s.name,
-                    hint = hint,
-                    icon = (state.subject_id == s.id) and "check_circle" or "movie",
-                    active = (state.subject_id == s.id),
-                    value = { "script-message-to", "bangumi_sync", "bind-subject", tostring(s.id), s.name_cn ~= "" and s.name_cn or s.name }
-                })
-            end
-            send_menu(items)
-        end)
-    else
-        send_menu(items)
+        execute_search(query, true)
     end
 end
 
@@ -370,7 +410,7 @@ mp.register_script_message("skip-prompt", function()
     mp.osd_message("已跳过本集同步", 1.5)
 end)
 mp.register_script_message("open-search", function() open_search_menu() end)
-mp.register_script_message("do-search", function(query) open_search_menu(query) end)
+mp.register_script_message("do-search", function(query) execute_search(query) end)
 
 mp.register_script_message("bind-subject", function(sid, sname)
     state.subject_id = tonumber(sid)

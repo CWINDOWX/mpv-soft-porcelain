@@ -190,7 +190,8 @@ def cmd_search(cfg_dir, keyword):
 def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name):
     mp = os.path.join(cfg_dir, "bangumi-map.json")
     mapping = load_json(mp, {})
-    mapping[folder_key.lower()] = {"id": int(subject_id), "name": subject_name}
+    norm_key = os.path.normpath(folder_key).lower()
+    mapping[norm_key] = {"id": int(subject_id), "name": subject_name}
     save_json(mp, mapping)
     out_json({"ok": True})
 

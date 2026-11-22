@@ -7,14 +7,18 @@ local osd_width, osd_height, pause = 0, 0, true
 local time_pos_observer_active = false
 local overlay = mp.create_osd_overlay('ass-events')
 
-local function realtime_position_text(event, pos, displayarea)
+local function realtime_position_text(event, pos, displayarea, top_offset)
+    top_offset = top_offset or 0
     if not event.move then
-        local _, current_y = unpack(event.pos)
-        if not current_y or tonumber(current_y) > displayarea then return end
+        local cur_x, current_y = unpack(event.pos)
+        if not current_y then return end
+        local shifted_y = tonumber(current_y) + top_offset
+        if shifted_y > displayarea then return end
+        local clean_text = event.text:gsub("\\pos%(.-%)", "")
         if event.style ~= "SP" and event.style ~= "MSG" then
-            return string.format("{\\an8}%s", event.text)
+            return string.format("{\\pos(%.1f,%.1f)\\an8}%s", tonumber(cur_x) or 960, shifted_y, clean_text)
         else
-            return string.format("{\\an7}%s", event.text)
+            return string.format("{\\pos(%.1f,%.1f)\\an7}%s", tonumber(cur_x) or 0, shifted_y, clean_text)
         end
     end
 
@@ -23,9 +27,9 @@ local function realtime_position_text(event, pos, displayarea)
     local duration = event.end_time - event.start_time  --mean: options.scrolltime
     local progress = (pos - event.start_time) / duration  -- 移动进度 [0, 1]
 
-    -- 计算当前坐标
+    -- 计算当前坐标（窗口模式下自动下移避开常驻顶栏）
     local current_x = tonumber(x1 + (x2 - x1) * progress)
-    local current_y = tonumber(y1 + (y2 - y1) * progress)
+    local current_y = tonumber(y1 + (y2 - y1) * progress) + top_offset
 
     -- 移除 \move 标签并应用当前坐标
     local clean_text = event.text:gsub("\\move%(.-%)", "")
@@ -84,7 +88,9 @@ function render(pos_arg)
     local ass_prefix = string.format("{\\rDefault\\fn%s\\fs%d\\c&HFFFFFF&\\alpha&H%s\\bord%s\\shad%s\\b%s\\q2}",
         fontname, math.max(12, math.floor(fontsize)), alpha, tostring(options.outline or 1.2), tostring(options.shadow or 0.6), options.bold and "1" or "0")
 
-    local max_y = height * displayarea_ratio
+    local top_margin_ratio = mp.get_property_number("video-margin-ratio-top", 0) or 0
+    local top_offset = math.floor(height * top_margin_ratio)
+    local max_y = top_offset + (height - top_offset) * displayarea_ratio
     for i = lo, #COMMENTS do
         local event = COMMENTS[i]
         if not event then break end
@@ -95,7 +101,7 @@ function render(pos_arg)
                 or (options.block_top and event.style == "TOP")
                 or (options.block_bottom and event.style == "BTM")
             if not blocked then
-                local text = realtime_position_text(event, pos, max_y)
+                local text = realtime_position_text(event, pos, max_y, top_offset)
                 if text then
                     text = text:gsub(re_entity, "")
                     if options.block_color then
@@ -203,13 +209,17 @@ function show_message(text, time)
     message_timer.timeout = time or 3
     message_timer:kill()
     message_overlay:remove()
-    local message = string.format("{\\an%d\\pos(%d,%d)}%s", options.message_anlignment,
-       options.message_x, options.message_y, text)
     local width, height = 1920, 1080
-    local ratio = osd_width / osd_height
-    if width / height < ratio then
-        height = width / ratio
+    if osd_width > 0 and osd_height > 0 then
+        local ratio = osd_width / osd_height
+        if width / height < ratio then
+            height = width / ratio
+        end
     end
+    local top_r = mp.get_property_number("video-margin-ratio-top", 0) or 0
+    local msg_y = (tonumber(options.message_y) or 96) + (options.message_anlignment >= 7 and math.floor(height * top_r) or 0)
+    local msg_x = (tonumber(options.message_x) or 28) + math.floor(width * (mp.get_property_number("video-margin-ratio-left", 0) or 0))
+    local message = string.format("{\\an%d\\pos(%d,%d)}%s", options.message_anlignment, msg_x, msg_y, text)
     message_overlay.res_x = width
     message_overlay.res_y = height
     message_overlay.data = message

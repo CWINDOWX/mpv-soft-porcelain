@@ -155,6 +155,11 @@ local function match_current_file(hint_anime)
             state.subject_name = res.subject_name
             state.season = res.season or 1
             state.episode = res.episode
+            mp.set_property_native("user-data/bangumi_sync/match-info", {
+                anime = state.subject_name,
+                episode = state.episode and ("第" .. tostring(state.episode) .. "话") or "",
+                path = path
+            })
             msg.info(string.format("Bangumi 匹配: #%s %s S%sE%s", tostring(res.subject_id), tostring(res.subject_name), tostring(state.season), tostring(res.episode)))
 
             -- If uosc_danmaku couldn't match an English/Romaji filename on Dandanplay,
@@ -370,6 +375,13 @@ mp.register_script_message("do-search", function(query) open_search_menu(query) 
 mp.register_script_message("bind-subject", function(sid, sname)
     state.subject_id = tonumber(sid)
     state.subject_name = sname
+    if state.current_path and sname and sname ~= "" then
+        mp.set_property_native("user-data/bangumi_sync/match-info", {
+            anime = sname,
+            episode = state.episode and ("第" .. tostring(state.episode) .. "话") or "",
+            path = state.current_path
+        })
+    end
     update_uosc_button()
     if state.current_path then
         local folder = utils.split_path(state.current_path)

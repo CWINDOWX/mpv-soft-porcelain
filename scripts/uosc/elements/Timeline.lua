@@ -253,10 +253,19 @@ function Timeline:render()
 		return time <= state.time and x or x + line_width
 	end
 
+	-- Clip timeline seamlessly into rounded inner video viewport when framed
+	local vp = Elements:v('window_border', 'viewport')
+	local vp_clip = ''
+	if vp and vp.radius and vp.radius > 0 then
+		local cpath = assdraw.ass_new()
+		cpath:round_rect_cw(vp.ax, vp.ay, vp.bx, vp.by, vp.radius)
+		vp_clip = '\\clip(' .. cpath.scale .. ', ' .. cpath.text .. ')'
+	end
+
 	-- Background
 	ass:new_event()
 	ass:pos(0, 0)
-	ass:append('{\\rDefault\\an7\\blur0\\bord0\\1c&H' .. bg .. '}')
+	ass:append('{\\rDefault\\an7\\blur0\\bord0\\1c&H' .. bg .. vp_clip .. '}')
 	ass:opacity(config.opacity.timeline)
 	ass:draw_start()
 	ass:rect_cw(bax, bay, fax, bby) --left of progress
@@ -266,12 +275,12 @@ function Timeline:render()
 
 	-- Crisp 1px top hairline boundary separating timeline bar from video
 	if visibility > 0 then
-		ass:rect(bax, bay, bbx, bay + 1, {color = bgt, opacity = visibility * 0.16})
+		ass:rect(bax, bay, bbx, bay + 1, {color = bgt, opacity = visibility * 0.16, clip = vp_clip ~= '' and vp_clip or nil})
 	end
 
 	-- Progress
 	local function draw_progress()
-		ass:rect(fax, fay, fbx, fby, {opacity = config.opacity.position})
+		ass:rect(fax, fay, fbx, fby, {opacity = config.opacity.position, clip = vp_clip ~= '' and vp_clip or nil})
 	end
 
 	-- Youtube heatmap

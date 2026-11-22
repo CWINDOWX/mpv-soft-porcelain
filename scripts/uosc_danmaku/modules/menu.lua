@@ -14,10 +14,10 @@ function get_animes(query)
     local full_url = url .. "?" .. params
     local items = {}
 
-    local message = "加载数据中..."
+    local message = "搜索中…"
     local menu_type = "menu_anime"
-    local menu_title = "在此处输入番剧名称"
-    local footnote = "使用enter或ctrl+enter进行搜索"
+    local menu_title = "搜索弹幕"
+    local footnote = nil
     local menu_cmd = { "script-message-to", mp.get_script_name(), "search-anime-event" }
     if uosc_available then
         update_menu_uosc(menu_type, menu_title, message, footnote, menu_cmd, query)
@@ -232,28 +232,21 @@ function open_input_menu_uosc()
         local episode = DANMAKU.episode:gsub("%s.-$","")
         episode = episode:match("^(第.*[话回集]+)%s*") or episode
         items[#items + 1] = {
-            title = string.format("已关联弹幕：%s-%s", DANMAKU.anime, episode),
+            title = string.format("%s · %s", DANMAKU.anime, episode),
             bold = true,
-            italic = true,
             keep_open = true,
             selectable = false,
+            muted = true,
         }
     end
 
-    items[#items + 1] = {
-        hint = "  追加|ds或|dy或|dm可搜索电视剧|电影|国漫",
-        keep_open = true,
-        selectable = false,
-    }
-
     local menu_props = {
         type = "menu_danmaku",
-        title = "在此处输入番剧名称",
+        title = "搜索弹幕",
         search_style = "palette",
         search_debounce = "submit",
         search_suggestion = parse_title(),
         on_search = { "script-message-to", mp.get_script_name(), "search-anime-event" },
-        footnote = "使用enter或ctrl+enter进行搜索",
         items = items
     }
     local json_props = utils.format_json(menu_props)
@@ -389,14 +382,14 @@ function open_add_menu_uosc()
             local item = {title = url, value = url, keep_open = true,}
             if source.from == "api_server" then
                 if source.blocked then
-                    item.hint = "来源：弹幕服务器（已屏蔽）"
+                    item.hint = "已屏蔽"
                     item.actions = {{icon = "check", name = "unblock", label = "解除屏蔽"},}
                 else
-                    item.hint = "来源：弹幕服务器（未屏蔽）"
+                    item.hint = "弹幕库"
                     item.actions = {{icon = "not_interested", name = "block", label = "屏蔽"},}
                 end
             else
-                item.hint = "来源：用户添加"
+                item.hint = "自定义"
                 item.actions = {{icon = "delete", name = "delete", label = "删除"},}
             end
             table.insert(sources, item)
@@ -404,11 +397,10 @@ function open_add_menu_uosc()
     end
     local menu_props = {
         type = "menu_source",
-        title = "在此输入源地址url",
+        title = "添加弹幕源",
         search_style = "palette",
         search_debounce = "submit",
         on_search = { "script-message-to", mp.get_script_name(), "add-source-event" },
-        footnote = "使用enter或ctrl+enter进行添加",
         items = sources,
         item_actions_place = "outside",
         callback = {mp.get_script_name(), 'setup-danmaku-source'},
@@ -1196,7 +1188,7 @@ function open_delay_menu_uosc(source_url, status)
                 end
             end
             local item = {title = url, value = url, keep_open = true,}
-            item.hint = "当前弹幕源延迟:" .. string.format("%.1f", delay + 1e-10) .. "秒"
+            item.hint = string.format("%+.1fs", delay + 1e-10)
             item.active = url == source_url
             table.insert(sources, item)
         end
@@ -1204,18 +1196,18 @@ function open_delay_menu_uosc(source_url, status)
 
     local menu_props = {
         type = "menu_delay",
-        title = "弹幕源延迟设置",
+        title = "弹幕延迟",
         search_style = "disabled",
         items = sources,
         callback = {mp.get_script_name(), 'setup-source-delay'},
     }
     if source_url ~= nil then
         if status == "error" then
-            menu_props.title = "输入非数字字符或范围出错"
+            menu_props.title = "格式无效"
             -- 创建一个定时器，在1秒后触发回调函数，删除搜索栏错误信息
             mp.add_timeout(1.0, function() open_delay_menu_uosc(source_url) end)
         else
-            menu_props.title = "请输入数字，单位（秒）/ 或者按照形如\"14m15s\"的格式输入分钟数加秒数"
+            menu_props.title = "输入延迟（秒或 XmYs）"
         end
         menu_props.search_style = "palette"
         menu_props.search_debounce = "submit"
@@ -1240,15 +1232,15 @@ end
 
 -- 总集合弹幕菜单
 local total_menu_items_config = {
-    { title = "弹幕搜索", action = "open_search_danmaku_menu" },
-    { title = "从源添加弹幕", action = "open_add_source_menu" },
-    { title = "弹幕源延迟设置", action = "open_source_delay_menu" },
+    { title = "搜索弹幕", action = "open_search_danmaku_menu" },
+    { title = "添加弹幕源", action = "open_add_source_menu" },
+    { title = "弹幕延迟", action = "open_source_delay_menu" },
     { title = "弹幕样式", action = "open_danmaku_style_menu" },
-    { title = "弹幕内容", action = "open_content_danmaku_menu" },
+    { title = "弹幕列表", action = "open_content_danmaku_menu" },
 }
 
 function open_add_total_menu_uosc()
-    if mp.get_property("user-data/uosc/menu/type") == "menu_total" then
+    if mp.get_property_native("user-data/uosc/menu/type") == "menu_total" then
         mp.commandv("script-message-to", "uosc", "close-menu")
         return
     end
@@ -1258,11 +1250,11 @@ function open_add_total_menu_uosc()
         local episode = DANMAKU.episode:gsub("%s.-$","")
         episode = episode:match("^(第.*[话回集]+)%s*") or episode
         items[#items + 1] = {
-            title = string.format("已关联弹幕：%s-%s", DANMAKU.anime, episode),
-            bold = true,
-            italic = true,
+            title = string.format("%s · %s", DANMAKU.anime, episode),
             keep_open = true,
             selectable = false,
+            muted = true,
+            separator = true,
         }
     end
 
@@ -1367,7 +1359,7 @@ local function register_danmaku_uosc_buttons()
         "danmaku_menu",
         utils.format_json({
             icon = "tune",
-            tooltip = "弹幕管理与搜索 (Shift+D / Ctrl+D)",
+            tooltip = "弹幕设置",
             command = "script-message open_add_total_menu",
         })
     )

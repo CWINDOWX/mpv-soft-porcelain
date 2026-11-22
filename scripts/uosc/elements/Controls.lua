@@ -416,7 +416,7 @@ function Controls:update_dimensions()
 			end
 
 			local bx = current_x + width
-			if element then element:set_coordinates(round(current_x), round(self.by - height), bx, self.by) end
+			if element then element:set_coordinates(round(current_x), round(self.by - height), round(bx), round(self.by)) end
 			current_x = element and bx + spacing or bx
 		end
 	end
@@ -462,9 +462,7 @@ function Controls:render()
 	-- Frosted porcelain floating dock container framing all bottom controls cleanly
 	ass:rect(dax, day, dbx, dby, {
 		color = bg,
-		border = 1,
-		border_color = bgt,
-		opacity = {main = visibility * 0.62, border = visibility * 0.16},
+		opacity = visibility * 0.66,
 		radius = dock_radius,
 	})
 	return ass

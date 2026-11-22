@@ -1614,9 +1614,7 @@ function Menu:render()
 		end
 		ass:rect(bg_rect.ax, bg_rect.ay, bg_rect.bx, bg_rect.by, {
 			color = bg,
-			border = 1,
-			border_color = bgt,
-			opacity = {main = menu_opacity * config.opacity.menu, border = menu_opacity * 0.14},
+			opacity = menu_opacity * config.opacity.menu,
 			radius = card_radius,
 		})
 
@@ -1763,10 +1761,8 @@ function Menu:render()
 
 						ass:rect(rect.ax, rect.ay, rect.bx, rect.by, {
 							radius = state.radius > 2 and state.radius - 1 or state.radius,
-							color = is_active and fg or bg,
-							border = 1,
-							border_color = is_active and fg or bgt,
-							opacity = {main = menu_opacity, border = menu_opacity * (is_active and 0.3 or 0.16)},
+							color = is_active and fg or fgt,
+							opacity = menu_opacity * (is_active and 0.98 or 0.92),
 							clip = item_clip,
 						})
 						ass:icon(rect.ax + size / 2, rect.ay + size / 2, size * 0.66, action.icon, {

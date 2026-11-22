@@ -130,11 +130,14 @@ function ass_mt:tooltip(element, value, opts)
 
 	-- Draw
 	local ax, ay, bx, by = round(x - width_half), round(y - height_half), round(x + width_half), round(y + height_half)
+	self:rect(ax, ay + 1, bx, by + 2, {
+		color = bgt,
+		opacity = 0.08 * config.opacity.tooltip,
+		radius = state.radius,
+	})
 	self:rect(ax, ay, bx, by, {
 		color = opts.invert_colors and fg or bg,
-		border = 1,
-		border_color = opts.invert_colors and fg or bgt,
-		opacity = {main = config.opacity.tooltip, border = 0.14 * config.opacity.tooltip},
+		opacity = config.opacity.tooltip,
 		radius = state.radius,
 	})
 	local func = opts.timestamp and self.timestamp or self.txt

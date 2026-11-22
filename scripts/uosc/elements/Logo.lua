@@ -34,12 +34,10 @@ function Logo:render()
 		opacity = 0.08,
 	})
 
-	-- Pure frosted porcelain medallion with delicate cerulean rim
+	-- Pure frosted porcelain medallion (borderless smooth vector fill)
 	ass:circle(cx, cy, r, {
 		color = 'ffffff',
-		border = round(1.5 * scale),
-		border_color = fg,
-		opacity = {main = 0.96, border = 0.28},
+		opacity = 0.96,
 	})
 
 	-- Inner soft mist halo ring
@@ -56,7 +54,7 @@ function Logo:render()
 
 	-- Primary calm title
 	local primary_msg = (options.idlemsg == 'default' or options.idlemsg == '')
-		and '拖入番剧开始播放' or tostring(options.idlemsg)
+		and '拖入视频开始播放' or tostring(options.idlemsg)
 	local title_size = round(23 * scale)
 	local title_y = cy + r + round(24 * scale)
 	ass:txt(cx, title_y, 8, primary_msg, {
@@ -67,7 +65,7 @@ function Logo:render()
 	})
 
 	-- Quiet minimalist shortcut pill bar
-	local sub_text = '右键 / Tab 菜单   ·   Shift+A Anime4K 画质   ·   Z 弹幕开关   ·   Ctrl+B 番剧同步'
+	local sub_text = '右键 菜单  ·  Shift+A 画质  ·  Z 弹幕  ·  Ctrl+B 同步'
 	local sub_size = round(13.5 * scale)
 	local sub_opts = {size = sub_size, color = bgt, opacity = 0.58}
 	local sub_w = text_width(sub_text, sub_opts)
@@ -77,13 +75,20 @@ function Logo:render()
 	local pill_h = sub_size + pill_pad_y * 2
 	if sub_w + pill_pad_x * 2 < display.width * 0.92 then
 		ass:rect(
+			cx - sub_w / 2 - pill_pad_x, pill_y + 1,
+			cx + sub_w / 2 + pill_pad_x, pill_y + pill_h + 1,
+			{
+				color = bgt,
+				opacity = 0.05,
+				radius = math.floor(pill_h / 2),
+			}
+		)
+		ass:rect(
 			cx - sub_w / 2 - pill_pad_x, pill_y,
 			cx + sub_w / 2 + pill_pad_x, pill_y + pill_h,
 			{
 				color = 'ffffff',
-				border = 1,
-				border_color = bgt,
-				opacity = {main = 0.72, border = 0.10},
+				opacity = 0.78,
 				radius = math.floor(pill_h / 2),
 			}
 		)

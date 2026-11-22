@@ -122,10 +122,8 @@ function Speed:render()
 	-- Background
 	ass:rect(self.ax, self.ay, self.bx, self.by, {
 		color = bg,
-		border = 1,
-		border_color = bgt,
 		radius = state.radius,
-		opacity = {main = opacity * config.opacity.speed, border = opacity * 0.14},
+		opacity = opacity * config.opacity.speed,
 	})
 
 	-- Coordinates

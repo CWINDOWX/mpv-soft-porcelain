@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,7 +18,7 @@ def out_json(obj):
 
 def load_json(path, default):
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
             return data if isinstance(data, type(default)) else default
     except Exception:
@@ -123,6 +124,14 @@ def search_subjects(keyword, token=None):
         body={"keyword": keyword, "filter": {"type": [2]}},
         query={"limit": 12},
     )
+    if status == 401 and token:
+        status, data = api_request(
+            "POST",
+            "/v0/search/subjects",
+            token=None,
+            body={"keyword": keyword, "filter": {"type": [2]}},
+            query={"limit": 12},
+        )
     if status < 200 or status >= 300:
         return None, data.get("description") or data.get("message") or f"HTTP {status}"
     items = []
@@ -187,13 +196,126 @@ def cmd_search(cfg_dir, keyword):
     out_json({"ok": True, "items": items})
 
 
-def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name):
+def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name, ep_num=None):
     mp = os.path.join(cfg_dir, "bangumi-map.json")
     mapping = load_json(mp, {})
     norm_key = os.path.normpath(folder_key).lower()
     mapping[norm_key] = {"id": int(subject_id), "name": subject_name}
     save_json(mp, mapping)
-    out_json({"ok": True})
+
+    ep_title = ""
+    if ep_num is not None and str(ep_num).strip() != "":
+        try:
+            auth = load_json(os.path.join(cfg_dir, "bangumi-auth.json"), {})
+            ep_obj, _ = get_episode_info(cfg_dir, subject_id, ep_num, auth.get("token"), allow_cache=True)
+            ep_title = extract_ep_title(ep_obj)
+        except Exception:
+            ep_title = ""
+
+    out_json({"ok": True, "episode_title": ep_title})
+
+
+def extract_ep_title(ep_obj):
+    if not isinstance(ep_obj, dict):
+        return ""
+    return (ep_obj.get("name_cn") or ep_obj.get("name") or "").strip()
+
+
+def find_episode_in_list(episodes, target_ep):
+    sort_match = None
+    for ep in episodes or []:
+        try:
+            if ep.get("ep") is not None and abs(float(ep["ep"]) - target_ep) < 1e-6:
+                return ep
+            if sort_match is None and ep.get("sort") is not None and abs(float(ep["sort"]) - target_ep) < 1e-6:
+                sort_match = ep
+        except Exception:
+            continue
+    return sort_match
+
+
+def fetch_subject_episodes(subject_id, token=None):
+    sid = int(subject_id)
+    all_eps = []
+    offset = 0
+    for _ in range(20):
+        status, obj = api_request(
+            "GET",
+            "/v0/episodes",
+            token=token,
+            query={"subject_id": sid, "type": 0, "limit": 100, "offset": offset},
+        )
+        if status == 401 and token:
+            token = None
+            status, obj = api_request(
+                "GET",
+                "/v0/episodes",
+                token=None,
+                query={"subject_id": sid, "type": 0, "limit": 100, "offset": offset},
+            )
+        if status < 200 or status >= 300:
+            if status == 0:
+                return None, "网络请求失败"
+            msg = obj.get("description") or obj.get("message") or f"HTTP {status}"
+            return None, msg
+        batch = obj.get("data") or []
+        for ep in batch:
+            all_eps.append({
+                "id": ep.get("id"),
+                "ep": ep.get("ep"),
+                "sort": ep.get("sort"),
+                "name_cn": (ep.get("name_cn") or "").strip(),
+                "name": (ep.get("name") or "").strip(),
+            })
+        offset += len(batch)
+        total = obj.get("total")
+        if not batch or (total is not None and offset >= int(total)):
+            break
+    return all_eps, None
+
+
+def get_episode_info(cfg_dir, subject_id, ep_num, token=None, allow_cache=True):
+    try:
+        sid = int(subject_id)
+        target_ep = float(ep_num)
+    except Exception:
+        return None, "集数格式无效"
+
+    cache_path = os.path.join(cfg_dir, "_cache", "bangumi-episodes-cache.json")
+    cache = load_json(cache_path, {})
+    sid_key = str(sid)
+    now = int(time.time())
+
+    if allow_cache and sid_key in cache and isinstance(cache[sid_key], dict):
+        entry = cache[sid_key]
+        age = now - int(entry.get("ts") or 0)
+        found = find_episode_in_list(entry.get("episodes"), target_ep)
+        if found:
+            has_title = bool(extract_ep_title(found))
+            if (has_title and age < 7 * 86400) or age < 3 * 3600:
+                return found, None
+        elif age < 3 * 3600:
+            return None, None
+
+    episodes, err = fetch_subject_episodes(sid, token=token)
+    if err is not None:
+        # Fallback to stale cache if available when offline
+        if sid_key in cache and isinstance(cache[sid_key], dict):
+            stale = find_episode_in_list(cache[sid_key].get("episodes"), target_ep)
+            if stale:
+                return stale, None
+        return None, err
+
+    cache[sid_key] = {"ts": now, "episodes": episodes}
+    if len(cache) > 200:
+        ordered = sorted(cache.items(), key=lambda kv: int((kv[1] or {}).get("ts") or 0), reverse=True)
+        cache = dict(ordered[:200])
+    try:
+        save_json(cache_path, cache)
+    except Exception:
+        pass
+
+    return find_episode_in_list(episodes, target_ep), None
 
 
 def pick_best_subject(items, season):
@@ -233,21 +355,33 @@ def pick_best_subject(items, season):
 
 def cmd_match(cfg_dir, filepath, hint_anime=""):
     auth = load_json(os.path.join(cfg_dir, "bangumi-auth.json"), {})
+    token = auth.get("token")
     folder_key = os.path.normpath(os.path.dirname(filepath)).lower()
     mapping = load_json(os.path.join(cfg_dir, "bangumi-map.json"), {})
 
     title, season, episode = parse_episode_and_title(filepath, hint_anime)
 
+    def resolve_title(sid):
+        if not sid or episode is None:
+            return ""
+        try:
+            ep_obj, _ = get_episode_info(cfg_dir, sid, episode, token, allow_cache=True)
+            return extract_ep_title(ep_obj)
+        except Exception:
+            return ""
+
     if folder_key in mapping:
         saved = mapping[folder_key]
+        sid = saved.get("id")
         out_json({
             "ok": True,
             "matched": True,
             "source": "folder_cache",
-            "subject_id": saved.get("id"),
+            "subject_id": sid,
             "subject_name": saved.get("name"),
             "season": season or 1,
             "episode": episode,
+            "episode_title": resolve_title(sid),
             "query": title,
         })
         return
@@ -262,23 +396,25 @@ def cmd_match(cfg_dir, filepath, hint_anime=""):
     else:
         query_with_season = query
 
-    items, err = search_subjects(query_with_season, auth.get("token"))
+    items, err = search_subjects(query_with_season, token)
     if (err or not items) and query_with_season != query:
-        items, err = search_subjects(query, auth.get("token"))
+        items, err = search_subjects(query, token)
 
     if err or not items:
         out_json({"ok": True, "matched": False, "season": season or 1, "episode": episode, "query": title, "error": err or ""})
         return
 
     best = pick_best_subject(items, season)
+    sid = best["id"]
     out_json({
         "ok": True,
         "matched": True,
         "source": "search",
-        "subject_id": best["id"],
+        "subject_id": sid,
         "subject_name": best["name_cn"] or best["name"],
         "season": season or 1,
         "episode": episode,
+        "episode_title": resolve_title(sid),
         "query": title,
     })
 
@@ -287,48 +423,24 @@ def cmd_mark(cfg_dir, subject_id, ep_num):
     auth = load_json(os.path.join(cfg_dir, "bangumi-auth.json"), {})
     token = auth.get("token")
     if not token:
-        out_json({"ok": False, "error": "尚未登录 Bangumi，请先在菜单中粘贴 Access Token 登录"})
+        out_json({"ok": False, "error": "请先登录 Bangumi"})
         return
 
     sid = int(subject_id)
-    target_ep = float(ep_num)
+    found, err = get_episode_info(cfg_dir, sid, ep_num, token, allow_cache=True)
+    if not found and err is None:
+        # Refresh cache once in case new episode was added recently
+        found, err = get_episode_info(cfg_dir, sid, ep_num, token, allow_cache=False)
 
-    # An exact ep on any page takes precedence over a sort match.
-    found = None
-    sort_match = None
-    offset = 0
-    while True:
-        status, obj = api_request(
-            "GET",
-            "/v0/episodes",
-            token=token,
-            query={"subject_id": sid, "type": 0, "limit": 100, "offset": offset},
-        )
-        if status < 200 or status >= 300:
-            msg = obj.get("description") or obj.get("message") or f"HTTP {status}"
-            out_json({"ok": False, "error": f"获取剧集列表失败：{msg}"})
-            return
-        batch = obj.get("data") or []
-        for ep in batch:
-            if ep.get("ep") is not None and abs(float(ep["ep"]) - target_ep) < 1e-6:
-                found = ep
-                break
-            if sort_match is None and ep.get("sort") is not None and abs(float(ep["sort"]) - target_ep) < 1e-6:
-                sort_match = ep
-
-        offset += len(batch)
-        total = obj.get("total")
-        if found or not batch or (total is not None and offset >= int(total)):
-            break
-
-    if found is None:
-        found = sort_match
-    if not found:
-        out_json({"ok": False, "error": f"未在 Bangumi 条目 #{sid} 中找到第 {ep_num} 集"})
+    if err is not None:
+        out_json({"ok": False, "error": f"获取剧集失败：{err}"})
+        return
+    if not found or not found.get("id"):
+        out_json({"ok": False, "error": f"未找到第 {ep_num} 话"})
         return
 
     ep_id = found["id"]
-    ep_title = found.get("name_cn") or found.get("name") or f"第 {ep_num} 集"
+    ep_title = extract_ep_title(found)
 
     # Ensure subject is in user's collection (3 = watching) if not collected yet
     col_status, _ = api_request("GET", f"/v0/users/{auth['user']['username']}/collections/{sid}", token=token)
@@ -343,10 +455,13 @@ def cmd_mark(cfg_dir, subject_id, ep_num):
         body={"type": 2},
     )
     if m_status < 200 or m_status >= 300:
-        msg = m_obj.get("description") or m_obj.get("message") or f"HTTP {m_status}"
-        if m_status == 401:
-            msg = "Bangumi Token 已失效，请重新登录"
-        out_json({"ok": False, "error": f"标记已看失败：{msg}"})
+        if m_status == 0:
+            msg = "网络请求失败"
+        elif m_status == 401:
+            msg = "Token 已失效，请重新登录"
+        else:
+            msg = m_obj.get("description") or m_obj.get("message") or f"HTTP {m_status}"
+        out_json({"ok": False, "error": msg})
         return
 
     out_json({
@@ -373,7 +488,8 @@ def main():
     elif cmd == "search" and len(sys.argv) >= 4:
         cmd_search(cfg_dir, sys.argv[3])
     elif cmd == "bind" and len(sys.argv) >= 6:
-        cmd_bind_folder(cfg_dir, sys.argv[3], sys.argv[4], sys.argv[5])
+        ep_arg = sys.argv[6] if len(sys.argv) >= 7 else None
+        cmd_bind_folder(cfg_dir, sys.argv[3], sys.argv[4], sys.argv[5], ep_arg)
     elif cmd == "match" and len(sys.argv) >= 4:
         hint = sys.argv[4] if len(sys.argv) >= 5 else ""
         cmd_match(cfg_dir, sys.argv[3], hint)

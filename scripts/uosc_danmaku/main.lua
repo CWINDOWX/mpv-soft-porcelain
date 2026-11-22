@@ -105,12 +105,12 @@ function show_loaded(init)
             episode = DANMAKU.episode,
             path = mp.get_property("path") or ""
         })
-        show_message("匹配内容：" .. DANMAKU.anime .. "-" .. DANMAKU.episode .. "\\N弹幕加载成功，共计" .. #COMMENTS .. "条弹幕", 3)
+        show_message(DANMAKU.anime .. " · " .. DANMAKU.episode .. "\\N已加载 " .. #COMMENTS .. " 条弹幕", 3)
         if init then
             msg.info(DANMAKU.anime .. "-" .. DANMAKU.episode .. " 弹幕加载成功，共计" .. #COMMENTS .. "条弹幕")
         end
     else
-        show_message("弹幕加载成功，共计" .. #COMMENTS .. "条弹幕", 3)
+        show_message("已加载 " .. #COMMENTS .. " 条弹幕", 3)
     end
 end
 
@@ -800,7 +800,11 @@ function auto_load_danmaku(path, dir, filename, number)
                 end
                 if playing_number ~= nil then
                     local x = playing_number - history_number --获取集数差值
-                    DANMAKU.episode = episode_number and string.format("第%s话", episode_number + x) or history_dir.episodeTitle
+                    if x == 0 and history_dir.episodeTitle and history_dir.episodeTitle ~= "" then
+                        DANMAKU.episode = history_dir.episodeTitle
+                    else
+                        DANMAKU.episode = episode_number and string.format("第%s话", episode_number + x) or history_dir.episodeTitle
+                    end
                     show_message("自动加载上次匹配的弹幕", 3)
                     msg.verbose("自动加载上次匹配的弹幕")
                     if history_id then

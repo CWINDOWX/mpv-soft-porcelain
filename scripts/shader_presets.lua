@@ -14,15 +14,15 @@ local STATE_PATH = mp.command_native({"expand-path", "~~/saved-shader-preset.jso
 local PRESETS = {
     {
         id = "none",
-        title = "原画（关闭着色器）",
-        hint = "原始画面 · 最低功耗",
+        title = "原画",
+        hint = "关闭着色器",
         badge = nil,
         shaders = {}
     },
     {
         id = "qcom",
-        title = "轻锐化 · QCOM SGEDS",
-        hint = "极轻负载 · 细节自然锐化",
+        title = "轻锐化",
+        hint = "QCOM SGEDS",
         badge = "Q",
         shaders = {
             "~~/shaders/QCOM/QCOM_SGEDS_ms_RT.glsl"
@@ -30,8 +30,8 @@ local PRESETS = {
     },
     {
         id = "a4k_fast",
-        title = "Anime4K 轻量清晰 (Mode A)",
-        hint = "Restore M + Upscale CNN · 流畅追番",
+        title = "Anime4K 轻量",
+        hint = "Mode A",
         badge = "A4K",
         shaders = {
             "~~/shaders/Anime4K/Anime4K_Restore_CNN_M.glsl",
@@ -40,8 +40,8 @@ local PRESETS = {
     },
     {
         id = "a4k_hq",
-        title = "Anime4K 高清重建 (Mode A+)",
-        hint = "Restore L + Upscale GAN · 推荐 1080p 番剧",
+        title = "Anime4K 高清",
+        hint = "Mode A+",
         badge = "A4K+",
         shaders = {
             "~~/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl",
@@ -50,8 +50,8 @@ local PRESETS = {
     },
     {
         id = "a4k_aio",
-        title = "Anime4K 综合优化 (AIO Q)",
-        hint = "一体化均衡增强",
+        title = "Anime4K 综合",
+        hint = "AIO Q",
         badge = "AIO",
         shaders = {
             "~~/shaders/Anime4K/Anime4K_AIO_optQ.glsl"
@@ -59,8 +59,8 @@ local PRESETS = {
     },
     {
         id = "a4k_restore",
-        title = "Anime4K 降噪修复（老番 / 低码率）",
-        hint = "Denoise + Restore GAN + Upscale CNN",
+        title = "Anime4K 降噪",
+        hint = "老番修复",
         badge = "FIX",
         shaders = {
             "~~/shaders/Anime4K/Anime4K_Denoise_Bilateral_Mode.glsl",
@@ -70,8 +70,8 @@ local PRESETS = {
     },
     {
         id = "artcnn",
-        title = "Ani4Kv2 ArtCNN（锐利线条）",
-        hint = "高画质 2D 动画线条超分",
+        title = "ArtCNN",
+        hint = "锐利线条",
         badge = "CNN",
         shaders = {
             "~~/shaders/Ani/Ani4Kv2_ArtCNN_C4F32_i2.glsl"
@@ -79,8 +79,8 @@ local PRESETS = {
     },
     {
         id = "fsrcnnx",
-        title = "FSRCNNX 16x（自然放大）",
-        hint = "线条温和自然 · 通用动画/实拍",
+        title = "FSRCNNX",
+        hint = "自然放大",
         badge = "FSR",
         shaders = {
             "~~/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl"
@@ -137,7 +137,7 @@ local function update_uosc_button()
     if state.memc then
         badge = badge .. "·60"
     end
-    local tooltip = "画质预设：" .. p.title .. "（A/D 切换 · 自动保存）"
+    local tooltip = "画质 · " .. p.title
     mp.commandv("script-message-to", "uosc", "set-button", "shader_preset", utils.format_json({
         icon = "auto_fix_high",
         active = is_active,
@@ -177,41 +177,41 @@ local function apply_state(show_osd)
     if show_osd then
         local extra = {}
         if state.deband then table.insert(extra, "去色带") end
-        if state.memc then table.insert(extra, "60fps补帧") end
-        local suffix = #extra > 0 and ("  + " .. table.concat(extra, " · ")) or ""
-        mp.osd_message("画质预设：" .. p.title .. suffix .. "（已记住）", 2.2)
+        if state.memc then table.insert(extra, "60fps 补帧") end
+        local suffix = #extra > 0 and (" + " .. table.concat(extra, " · ")) or ""
+        mp.osd_message("画质：" .. p.title .. suffix, 2.0)
     end
 end
 
 local function open_menu(action)
-    if (not action or action == "open-menu") and mp.get_property("user-data/uosc/menu/type") == "shader_presets_menu" then
+    if (not action or action == "open-menu") and mp.get_property_native("user-data/uosc/menu/type") == "shader_presets_menu" then
         mp.commandv("script-message-to", "uosc", "close-menu")
         return
     end
     local items = {}
-    for _, p in ipairs(PRESETS) do
+    for i, p in ipairs(PRESETS) do
         local selected = (p.id == state.preset)
         table.insert(items, {
             title = p.title,
             hint = p.hint,
             icon = selected and "radio_button_checked" or "radio_button_unchecked",
             active = selected,
+            separator = (i == #PRESETS),
             value = { "script-message-to", "shader_presets", "select", p.id }
         })
     end
 
-    table.insert(items, { title = "附加增强（可与预设叠加）", selectable = false, muted = true, italic = true, separator = true })
     table.insert(items, {
-        title = "去色带 (hdeband)",
-        hint = state.deband and "已开启" or "已关闭",
+        title = "去色带",
+        hint = state.deband and "开" or "关",
         icon = state.deband and "check_box" or "check_box_outline_blank",
         active = state.deband,
         keep_open = true,
         value = { "script-message-to", "shader_presets", "toggle-deband" }
     })
     table.insert(items, {
-        title = "60fps 补帧 (MVTools 快速)",
-        hint = state.memc and "已开启" or "已关闭",
+        title = "60fps 补帧",
+        hint = state.memc and "开" or "关",
         icon = state.memc and "check_box" or "check_box_outline_blank",
         active = state.memc,
         keep_open = true,
@@ -220,8 +220,7 @@ local function open_menu(action)
 
     local menu = {
         type = "shader_presets_menu",
-        title = "Anime4K & 画质预设",
-        footnote = "切换后自动保存，下次打开 MPV 自动恢复（快捷键 A / D 循环切换）",
+        title = "画质预设",
         items = items
     }
     mp.commandv("script-message-to", "uosc", action or "open-menu", utils.format_json(menu))

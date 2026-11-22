@@ -69,11 +69,13 @@ function PauseIndicator:render()
 	local radius = round(size * 0.72)
 	local cx, cy = display.width / 2, display.height / 2
 
+	ass:circle(cx, cy + round(2 * state.scale), radius, {
+		color = bgt,
+		opacity = 0.08 * self.opacity,
+	})
 	ass:circle(cx, cy, radius, {
 		color = bg,
-		border = 1.5,
-		border_color = bgt,
-		opacity = {main = 0.88 * self.opacity, border = 0.14 * self.opacity},
+		opacity = 0.90 * self.opacity,
 	})
 
 	if self.paused then

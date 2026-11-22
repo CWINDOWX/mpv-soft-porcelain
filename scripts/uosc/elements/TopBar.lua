@@ -110,20 +110,140 @@ function TopBar:register_observers()
 	end)
 end
 
+local EP_UNITS = {'话', '集', '回', '話'}
+local SEP_PREFIXES = {' ', '\t', '：', ':', '-', '—', '–', '·', '|', '　'}
+
+local function trim_str(s)
+	return tostring(s or ''):gsub('^%s+', ''):gsub('%s+$', '')
+end
+
+local function strip_leading_seps(s)
+	local changed = true
+	while changed and s ~= '' do
+		changed = false
+		for _, sep in ipairs(SEP_PREFIXES) do
+			if s:sub(1, #sep) == sep then
+				s = s:sub(#sep + 1)
+				changed = true
+				break
+			end
+		end
+	end
+	return s
+end
+
+local function split_episode_label(ep_str)
+	ep_str = trim_str(ep_str)
+	if ep_str == '' then return nil, nil end
+	local prefix = '第'
+	if ep_str:sub(1, #prefix) == prefix then
+		local after_di = ep_str:sub(#prefix + 1)
+		local num_str, rest = after_di:match('^%s*(%d+%.?%d*)%s*(.*)$')
+		if num_str and rest then
+			for _, unit in ipairs(EP_UNITS) do
+				if rest:sub(1, #unit) == unit then
+					local title_rest = trim_str(strip_leading_seps(rest:sub(#unit + 1)))
+					return prefix .. num_str .. unit, (title_rest ~= '' and title_rest or nil)
+				end
+			end
+		end
+	end
+	return nil, ep_str
+end
+
+local function extract_filename_episode_title(path)
+	if not path or path == '' or path:match('^https?://') then return nil end
+	local name = path:match('[^/\\]+$') or path
+	name = name:gsub('%.[^%.]+$', '')
+	local after = name:match('[Ss]%d%d?[._%s%-]*[Ee][Pp]?%d%d?%d?[._%s%-]+(.+)$')
+		or name:match('[._%s%-][Ee][Pp]?%d%d?%d?[._%s%-]+(.+)$')
+	if not after then return nil end
+	after = after:gsub('%b[]', ' '):gsub('%b()', ' '):gsub('【.-】', ' ')
+	after = after:gsub('[._]+', ' ')
+	local cut_patterns = {
+		'%f[%w][24][Kk]%f[%W].*',
+		'%f[%w]%d%d%d+[pPiI]%f[%W].*',
+		'%f[%w][Ww][Ee][Bb][%s%-]?[Dd][Ll].*',
+		'%f[%w][Ww][Ee][Bb][Rr][Ii][Pp].*',
+		'%f[%w][Bb][Dd][Rr][Ii][Pp].*',
+		'%f[%w][Bb][Ll][Uu][%-]?[Rr][Aa][Yy].*',
+		'%f[%w][Hh][Ee][Vv][Cc].*',
+		'%f[%w][Hh]%s*26[45].*',
+		'%f[%w][Xx]26[45].*',
+		'%f[%w][Aa][Vv]1%f[%W].*',
+		'%f[%w]10[Bb][Ii][Tt].*',
+		'%f[%w]8[Bb][Ii][Tt].*',
+		'%f[%w][Aa][Aa][Cc]%d*.*',
+		'%f[%w][Ff][Ll][Aa][Cc].*',
+		'%f[%w][Dd][Dd][Pp]%d*.*',
+		'%f[%w][Cc][Rr]%f[%W].*',
+		'%f[%w][Aa][Mm][Zz][Nn]%f[%W].*',
+		'%f[%w][Nn][Ff]%f[%W].*',
+		'%f[%w][Bb][%-][Gg][Ll][Oo][Bb][Aa][Ll].*',
+		'%f[%w][Bb][Aa][Hh][Aa]%f[%W].*',
+		'%f[%w][Cc][Hh][SsTt]%f[%W].*',
+		'%f[%w][Gg][Bb]%f[%W].*',
+		'%f[%w][Bb][Ii][Gg]5%f[%W].*',
+		'%f[%w][Jj][Pp][Nn]%f[%W].*',
+	}
+	for _, pat in ipairs(cut_patterns) do
+		after = after:gsub(pat, '')
+	end
+	after = trim_str(after:gsub('%s+', ' '):gsub('[%-%s_]+$', ''))
+	local low = after:lower()
+	if #after < 2 or low == 'chapters' or low == 'final' or low == 'end' or low == 'uncensored'
+		or low:match('^v%d+$') or low:match('^[%d%p%s]+$') then
+		return nil
+	end
+	return after
+end
+
 function TopBar:refresh_recognized_title()
 	local cur_path = mp.get_property('path') or ''
-	local picked = nil
-	if self.danmaku_match and self.danmaku_match.anime and self.danmaku_match.anime ~= ''
+	local dm, bgm = nil, nil
+	if self.danmaku_match and trim_str(self.danmaku_match.anime) ~= ''
 		and (not self.danmaku_match.path or self.danmaku_match.path == '' or self.danmaku_match.path == cur_path) then
-		picked = self.danmaku_match
-	elseif self.bangumi_match and self.bangumi_match.anime and self.bangumi_match.anime ~= ''
+		dm = self.danmaku_match
+	end
+	if self.bangumi_match and trim_str(self.bangumi_match.anime) ~= ''
 		and (not self.bangumi_match.path or self.bangumi_match.path == '' or self.bangumi_match.path == cur_path) then
-		picked = self.bangumi_match
+		bgm = self.bangumi_match
 	end
 
-	if picked then
-		local ep = picked.episode and tostring(picked.episode) or ''
-		local label = ep ~= '' and (tostring(picked.anime) .. ' · ' .. ep) or tostring(picked.anime)
+	local anime = (dm and trim_str(dm.anime)) or (bgm and trim_str(bgm.anime)) or nil
+	if anime and anime ~= '' then
+		local dm_num, dm_ep_title = split_episode_label(dm and dm.episode)
+		local bgm_num, bgm_ep_title = split_episode_label(bgm and bgm.episode)
+		if bgm and trim_str(bgm.episode_title) ~= '' then
+			bgm_ep_title = trim_str(bgm.episode_title)
+		end
+
+		local ep_num = dm_num or bgm_num
+		if not ep_num and bgm and bgm.episode_num then
+			ep_num = '第' .. tostring(bgm.episode_num) .. '话'
+		end
+
+		local ep_title = bgm_ep_title or dm_ep_title or extract_filename_episode_title(cur_path)
+		if ep_title then
+			ep_title = trim_str(ep_title)
+			if ep_num and ep_title:sub(1, #ep_num) == ep_num then
+				ep_title = trim_str(strip_leading_seps(ep_title:sub(#ep_num + 1)))
+			end
+			if ep_title == '' or ep_title == anime or ep_title == ep_num then
+				ep_title = nil
+			end
+		end
+
+		local ep_full = ''
+		if ep_num and ep_title then
+			ep_full = ep_num .. ' ' .. ep_title
+		elseif ep_num then
+			ep_full = ep_num
+		elseif ep_title then
+			ep_full = ep_title
+		end
+
+		local label = ep_full ~= '' and (anime .. ' · ' .. ep_full) or anime
 		self.recognized_title = ass_escape(label)
 	else
 		self.recognized_title = nil
@@ -331,13 +451,20 @@ function TopBar:render()
 			local bg_ax = rect.ax + math.floor((self.size - bg_size) / 2)
 			local bg_ay = rect.ay + margin
 			local bg_bx, bg_by = bg_ax + bg_size, bg_ay + bg_size
+			local btn_radius = math.min(state.radius, math.floor(bg_size / 2))
+
+			if not is_hover and is_framed then
+				ass:rect(bg_ax, bg_ay + 1, bg_bx, bg_by + 1, {
+					color = bgt,
+					opacity = visibility * 0.06,
+					radius = btn_radius,
+				})
+			end
 
 			ass:rect(bg_ax, bg_ay, bg_bx, bg_by, {
 				color = button_bg,
-				border = 1,
-				border_color = is_hover and button_bg or bgt,
-				opacity = {main = visibility * opacity, border = visibility * (is_hover and 0.25 or 0.13)},
-				radius = math.min(state.radius, math.floor(bg_size / 2)),
+				opacity = visibility * opacity,
+				radius = btn_radius,
 			})
 
 			ass:icon(bg_ax + bg_size / 2, bg_ay + bg_size / 2, bg_size * 0.54, icon_name, {
@@ -406,19 +533,24 @@ function TopBar:render()
 				local by = by - margin
 				local title_rect = {ax = ax, ay = title_ay, bx = ax + rect_width, by = by}
 				local is_title_hover = get_point_to_rectangle_proximity(cursor, title_rect) <= 0
+				opts.clip = string.format('\\clip(%d, %d, %d, %d)', title_rect.ax, ay, title_rect.bx - math.floor(padding * 0.5), by)
 
 				if self.recognized_title or options.top_bar_alt_title_place == 'toggle' then
 					cursor:zone('primary_down', title_rect, function() self:toggle_title() end)
 				end
 
-				local pill_fill = is_framed and 'ffffff' or bg
-				local pill_border = (is_title_hover and self.recognized_title) and fg or bgt
-				local pill_border_op = (is_title_hover and self.recognized_title) and 0.45 or 0.13
+				local pill_fill = (is_title_hover and self.recognized_title) and 'f8f1ea'
+					or (is_framed and 'ffffff' or bg)
+				if is_framed then
+					ass:rect(title_rect.ax, title_rect.ay + 1, title_rect.bx, title_rect.by + 1, {
+						color = bgt,
+						opacity = visibility * 0.06,
+						radius = state.radius,
+					})
+				end
 				ass:rect(title_rect.ax, title_rect.ay, title_rect.bx, title_rect.by, {
 					color = pill_fill,
-					border = 1,
-					border_color = pill_border,
-					opacity = {main = visibility * (is_framed and 0.94 or config.opacity.title), border = visibility * pill_border_op},
+					opacity = visibility * (is_framed and 0.96 or config.opacity.title),
 					radius = state.radius,
 				})
 
@@ -435,7 +567,7 @@ function TopBar:render()
 				ass:txt(x, ay + (self.size / 2), align, main_title, opts)
 
 				if is_title_hover and self.recognized_title then
-					ass:tooltip(title_rect, is_recognized_view and '已识别番剧 · 点击切换原文件名' or '原文件名 · 点击切回番名', {
+					ass:tooltip(title_rect, is_recognized_view and '切换文件名' or '切换番剧名', {
 						align = 2,
 						offset = round(6 * state.scale),
 					})

@@ -279,12 +279,7 @@ function Volume:render()
 	end
 	ass:rect(mute_rect.ax, mute_rect.ay, mute_rect.bx, mute_rect.by, {
 		color = is_lit and fg or bg,
-		border = 1,
-		border_color = is_lit and fg or bgt,
-		opacity = {
-			main = visibility * (is_lit and 0.94 or config.opacity.slider),
-			border = visibility * (is_lit and 0.25 or 0.14),
-		},
+		opacity = visibility * (is_lit and 0.96 or config.opacity.slider),
 		radius = state.radius,
 	})
 	ass:icon(mute_rect.ax + width_half - horizontal_shift, mute_rect.ay + height_half, icon_size, icon_name, {

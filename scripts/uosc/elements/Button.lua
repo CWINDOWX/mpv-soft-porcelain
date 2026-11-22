@@ -43,24 +43,20 @@ function Button:render()
 	local is_hover = self.proximity_raw <= 0
 	local is_lit = self.active or (is_hover and is_clickable)
 
-	-- Soft Porcelain pill styling:
-	-- Resting: frosted porcelain fill (bg) + subtle slate hairline + crisp slate ink icon (bgt)
-	-- Hover / Active: serene cerulean fill (fg) + crisp white icon (fgt)
+	-- Soft Porcelain pill styling (pure borderless vector fill for crisp smooth corners):
+	-- Resting: frosted porcelain fill (bg) + crisp slate ink icon (bgt)
+	-- Hover / Active: solid cerulean fill (fg) + crisp white icon (fgt), zero white halo/border
 	local pill_color = is_lit and self.foreground or self.background
 	local icon_color = is_lit and fgt or bgt
-	local pill_opacity = self.active and (is_hover and 1 or 0.94)
-		or (is_hover and is_clickable and 0.94 or config.opacity.controls)
-	local border_color = is_lit and (is_hover and fgt or self.foreground) or bgt
-	local border_opacity = is_lit and (is_hover and 0.35 or 0.22) or 0.14
+	local pill_opacity = self.active and (is_hover and 1 or 0.96)
+		or (is_hover and is_clickable and 0.96 or config.opacity.controls)
 
 	-- Background pill
 	if pill_opacity > 0 then
 		ass:rect(self.ax, self.ay, self.bx, self.by, {
 			color = pill_color,
 			radius = state.radius,
-			border = 1,
-			border_color = border_color,
-			opacity = {main = visibility * pill_opacity, border = visibility * border_opacity},
+			opacity = visibility * pill_opacity,
 		})
 	end
 
@@ -71,7 +67,7 @@ function Button:render()
 	local icon_clip
 	local icon_offset_y = 0
 	if self.badge then
-		local badge_bg = is_lit and self.background or self.foreground
+		local badge_bg = is_lit and fgt or self.foreground
 		local badge_fg = is_lit and self.foreground or fgt
 		local badge_font_size = math.max(8, round(self.font_size * 0.42))
 		local badge_opts = {size = badge_font_size, color = badge_fg, bold = true, opacity = visibility}
@@ -79,14 +75,12 @@ function Button:render()
 		local pad_x = math.max(3, math.ceil(badge_font_size * 0.35))
 		local width = math.ceil(badge_width + pad_x * 2)
 		local height = math.ceil(badge_font_size * 1.25)
-		local bx, by = self.bx + 2, self.by + 2
+		local bx, by = round(self.bx + 2), round(self.by + 2)
 		local badge_radius = math.min(state.radius, math.floor(height / 2))
 		ass:rect(bx - width, by - height, bx, by, {
 			color = badge_bg,
 			radius = badge_radius,
 			opacity = visibility,
-			border = 1,
-			border_color = is_lit and self.foreground or self.background,
 		})
 		ass:txt(bx - width / 2, by - height / 2, 5, self.badge, badge_opts)
 

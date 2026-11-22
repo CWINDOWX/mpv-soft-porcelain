@@ -161,26 +161,26 @@ local function is_kind_enabled(kind)
 end
 
 local function mode_label(m)
-    if m == "auto" then return "自动跳过 OP/ED" end
-    if m == "off" then return "已关闭" end
-    return "右下角提示询问（推荐）"
+    if m == "auto" then return "自动跳过" end
+    if m == "off" then return "关闭" end
+    return "提示询问"
 end
 
 local function update_uosc_button()
     local active = false
     local badge = nil
-    local tooltip = "OP/ED 跳过：" .. mode_label(config.mode) .. "（Shift+S 设置）"
+    local tooltip = "跳过 OP/ED · " .. mode_label(config.mode)
 
     if runtime.active_chap and runtime.prompt_visible then
         active = true
         badge = runtime.active_chap.kind == "op" and "OP" or (runtime.active_chap.kind == "ed" and "ED" or "预告")
-        tooltip = "当前处于" .. runtime.active_chap.label .. " · 按 S 跳过（Shift+S 设置）"
+        tooltip = "按 S 跳过" .. runtime.active_chap.label
     elseif config.mode == "auto" then
         active = true
         badge = "AUTO"
     elseif config.mode == "prompt" and #runtime.detected_list > 0 then
         badge = tostring(#runtime.detected_list)
-        tooltip = string.format("OP/ED 跳过：已识别 %d 段片头/片尾（Shift+S 设置）", #runtime.detected_list)
+        tooltip = string.format("跳过 OP/ED · %d 段", #runtime.detected_list)
     end
 
     mp.commandv("script-message-to", "uosc", "set-button", "chapter_skip", utils.format_json({
@@ -317,10 +317,9 @@ function render_prompt()
     draw_round_rect(ass, ax, ay + math.floor(2 * scale), bx, by + math.floor(3 * scale),
         radius, C_BGT, op * 0.10, 0)
 
-    -- Main frosted porcelain pill body
+    -- Main frosted porcelain pill body (borderless smooth fill)
     local main_bg = is_skip_hover and C_FG or C_BG
-    local main_border = is_skip_hover and C_FG or C_BGT
-    draw_round_rect(ass, ax, ay, bx, by, radius, main_bg, op * 0.95, 1, main_border, op * (is_skip_hover and 0.35 or 0.18))
+    draw_round_rect(ass, ax, ay, bx, by, radius, main_bg, op * 0.96, 0)
 
     -- Left accent icon circle / tag pill
     local badge_pad = math.floor(10 * scale)
@@ -335,7 +334,7 @@ function render_prompt()
     -- Text stack
     local text_x = badge_ax + badge_size + math.floor(11 * scale)
     local primary_label = "跳过" .. chap.label
-    local sub_label = "点击或按 S · Esc 忽略"
+    local sub_label = "S 跳过 · Esc 忽略"
     draw_text(ass, text_x, ay + math.floor(pill_h * 0.34), 4, primary_label,
         math.floor(16.5 * scale), is_skip_hover and C_FGT or C_BGT, op, true)
     draw_text(ass, text_x, ay + math.floor(pill_h * 0.72), 4, sub_label,
@@ -397,9 +396,9 @@ local function perform_skip(chap, is_auto)
             label = chap.label,
             expire = mp.get_time() + 6.0,
         }
-        mp.osd_message("⏭ 已自动跳过" .. chap.label .. "（6 秒内按 Alt+BS 可退回）", 3.0)
+        mp.osd_message("已跳过" .. chap.label .. "（Alt+BS 撤销）", 2.5)
     else
-        mp.osd_message("⏭ 已跳过" .. chap.label, 1.8)
+        mp.osd_message("已跳过" .. chap.label, 1.5)
     end
     update_uosc_button()
     return true
@@ -576,7 +575,7 @@ local function open_settings_menu(action)
             table.insert(parts, string.format("%s %s–%s", rec.label, fmt_time(rec.start_t), fmt_time(rec.end_t)))
         end
         table.insert(items, {
-            title = "当前视频检测到：" .. table.concat(parts, "  ·  "),
+            title = "已识别：" .. table.concat(parts, " · "),
             icon = "verified",
             selectable = false,
             muted = true,
@@ -584,8 +583,7 @@ local function open_settings_menu(action)
         })
     else
         table.insert(items, {
-            title = "当前视频未检测到 OP / ED 章节标注",
-            hint = "需视频内嵌章节",
+            title = "未检测到 OP / ED 章节",
             icon = "info_outline",
             selectable = false,
             muted = true,
@@ -598,8 +596,8 @@ local function open_settings_menu(action)
     local cur_rec = runtime.chapters[cur_idx]
     if cur_rec then
         table.insert(items, {
-            title = "立即跳过当前" .. cur_rec.label,
-            hint = "快捷键 S",
+            title = "跳过" .. cur_rec.label,
+            hint = "S",
             icon = "fast_forward",
             active = true,
             separator = true,
@@ -609,15 +607,14 @@ local function open_settings_menu(action)
 
     -- Mode selection
     local modes = {
-        { id = "prompt", title = "右下角提示询问（推荐）", hint = "播放到 OP/ED 时浮现跳过胶囊" },
-        { id = "auto",   title = "全自动跳过 OP / ED",    hint = "进入片头片尾自动无缝跳过" },
-        { id = "off",    title = "关闭自动跳过与提示",     hint = "不做任何干预" },
+        { id = "prompt", title = "提示询问" },
+        { id = "auto",   title = "自动跳过" },
+        { id = "off",    title = "关闭" },
     }
     for i, m in ipairs(modes) do
         local is_cur = (config.mode == m.id)
         table.insert(items, {
             title = m.title,
-            hint = m.hint,
             icon = is_cur and "radio_button_checked" or "radio_button_unchecked",
             active = is_cur,
             keep_open = true,
@@ -628,16 +625,15 @@ local function open_settings_menu(action)
 
     -- Granular toggles
     local toggles = {
-        { key = "skip_op",         title = "识别并跳过片头 (OP / Opening)",  val = config.skip_op },
-        { key = "skip_ed",         title = "识别并跳过片尾 (ED / Ending)",   val = config.skip_ed },
-        { key = "skip_preview",    title = "识别并跳过下集预告 (Preview)",    val = config.skip_preview },
-        { key = "ed_next_episode", title = "片尾为最后一章时直接切下一集",     val = config.ed_next_episode,
-          hint_on = "直接播下一集", hint_off = "跳到片尾结束（推荐）" },
+        { key = "skip_op",         title = "跳过片头 (OP)",  val = config.skip_op },
+        { key = "skip_ed",         title = "跳过片尾 (ED)",  val = config.skip_ed },
+        { key = "skip_preview",    title = "跳过预告",       val = config.skip_preview },
+        { key = "ed_next_episode", title = "片尾切下一集",    val = config.ed_next_episode },
     }
     for _, t in ipairs(toggles) do
         table.insert(items, {
             title = t.title,
-            hint = t.val and (t.hint_on or "已开启") or (t.hint_off or "已关闭"),
+            hint = t.val and "开" or "关",
             icon = t.val and "check_box" or "check_box_outline_blank",
             active = t.val,
             keep_open = true,
@@ -647,9 +643,8 @@ local function open_settings_menu(action)
 
     local menu = {
         type = "chapter_skip_menu",
-        title = "自动跳过 OP / ED 设置",
+        title = "跳过 OP / ED",
         search_style = "disabled",
-        footnote = "快捷键 S 立即跳过 · Shift+S 打开此菜单 · 自动保存设置",
         items = items,
     }
     mp.commandv("script-message-to", "uosc", action or "open-menu", utils.format_json(menu))
@@ -677,7 +672,7 @@ end
 
 -- Script messages
 mp.register_script_message("open-menu", function()
-    if mp.get_property("user-data/uosc/menu/type") == "chapter_skip_menu" then
+    if mp.get_property_native("user-data/uosc/menu/type") == "chapter_skip_menu" then
         mp.commandv("script-message-to", "uosc", "close-menu")
         return
     end

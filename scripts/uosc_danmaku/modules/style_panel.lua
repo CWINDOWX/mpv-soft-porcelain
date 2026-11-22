@@ -337,7 +337,7 @@ local function render_panel()
 
     local pad = math.floor(18 * scale)
     local card_w = math.floor(386 * scale)
-    local header_h = math.floor(42 * scale)
+    local header_h = math.floor(32 * scale)
     local preset_h = math.floor(30 * scale)
     local slider_row_h = math.floor(50 * scale)
     local font_row_h = math.floor(30 * scale)
@@ -359,7 +359,7 @@ local function render_panel()
         scale = scale * shrink
         pad = math.floor(18 * scale)
         card_w = math.floor(386 * scale)
-        header_h = math.floor(42 * scale)
+        header_h = math.floor(32 * scale)
         preset_h = math.floor(30 * scale)
         slider_row_h = math.floor(50 * scale)
         font_row_h = math.floor(30 * scale)
@@ -405,8 +405,8 @@ local function render_panel()
     draw_rrect(ass, ax, ay + math.floor(2 * scale), bx, by + math.floor(4 * scale),
         card_r, C_BGT, op * 0.10, 0)
 
-    -- Main frosted porcelain studio card
-    draw_rrect(ass, ax, ay, bx, by, card_r, C_BG, op * 0.96, 1, C_BGT, op * 0.16)
+    -- Main frosted porcelain studio card (borderless smooth vector fill)
+    draw_rrect(ass, ax, ay, bx, by, card_r, C_BG, op * 0.96, 0)
 
     local cx1 = ax + pad
     local cx2 = bx - pad
@@ -414,17 +414,15 @@ local function render_panel()
     local y = ay + pad
 
     -- === Header ===
-    draw_txt(ass, cx1, y + math.floor(11 * scale), 4, "弹幕样式调节",
-        math.floor(18 * scale), C_BGT, op, true)
-    draw_txt(ass, cx1, y + math.floor(31 * scale), 4, "拖动滑块实时预览 · 靠近圆点自动贴合",
-        math.floor(11 * scale), C_MUTED, op * 0.85, false)
+    draw_txt(ass, cx1, y + math.floor(header_h * 0.5), 4, "弹幕样式",
+        math.floor(17 * scale), C_BGT, op, true)
 
     local close_s = math.floor(28 * scale)
-    local close_rect = { ax = cx2 - close_s, ay = y + math.floor(3 * scale), bx = cx2, by = y + math.floor(3 * scale) + close_s }
+    local close_y = y + math.floor((header_h - close_s) / 2)
+    local close_rect = { ax = cx2 - close_s, ay = close_y, bx = cx2, by = close_y + close_s }
     local close_hov = (P.hover_id == "btn_close")
     draw_rrect(ass, close_rect.ax, close_rect.ay, close_rect.bx, close_rect.by, math.floor(8 * scale),
-        close_hov and C_CLOSE or C_WHITE, op * (close_hov and 0.94 or 0.90), 1,
-        close_hov and C_CLOSE or C_BGT, op * (close_hov and 0.3 or 0.12))
+        close_hov and C_CLOSE or C_WHITE, op * (close_hov and 0.96 or 0.92), 0)
     draw_txt(ass, (close_rect.ax + close_rect.bx) / 2, (close_rect.ay + close_rect.by) / 2, 5, "close",
         math.floor(16 * scale), close_hov and C_WHITE or C_MUTED, op, false, "MaterialIconsRound-Regular")
     table.insert(P.hitboxes, { id = "btn_close", kind = "button", rect = close_rect, on_click = function() close_danmaku_style_panel() end })
@@ -438,14 +436,13 @@ local function render_panel()
     local chip_gap = math.floor(6 * scale)
     local chip_w = (cw - chip_gap * (#PRESETS - 1)) / #PRESETS
     for idx, pr in ipairs(PRESETS) do
-        local px1 = cx1 + (idx - 1) * (chip_w + chip_gap)
-        local px2 = px1 + chip_w
+        local px1 = math.floor(cx1 + (idx - 1) * (chip_w + chip_gap) + 0.5)
+        local px2 = math.floor(px1 + chip_w + 0.5)
         local prect = { ax = px1, ay = y, bx = px2, by = y + preset_h }
         local pid = "preset_" .. pr.id
         local hov = (P.hover_id == pid)
         draw_rrect(ass, prect.ax, prect.ay, prect.bx, prect.by, math.floor(8 * scale),
-            hov and C_FG or C_WHITE, op * (hov and 0.94 or 0.92), 1,
-            hov and C_FG or C_BGT, op * (hov and 0.30 or 0.12))
+            hov and C_FG or C_WHITE, op * (hov and 0.96 or 0.94), 0)
         draw_txt(ass, (prect.ax + prect.bx) / 2, (prect.ay + prect.by) / 2, 5, pr.label,
             math.floor(12.5 * scale), hov and C_WHITE or C_BGT, op, hov)
         table.insert(P.hitboxes, {
@@ -499,9 +496,8 @@ local function render_panel()
                 local sx = tr_ax + tr_w * st
                 local passed = (st <= norm + 0.005)
                 local snapped_here = (math.abs(cur_val - sp.val) < (sl.step * 0.45))
-                draw_circle(ass, sx, tr_cy, snap_r,
-                    passed and C_WHITE or C_WHITE, op * 0.98,
-                    1.2, passed and C_FG or C_MUTED, op * (passed and 0.90 or 0.55))
+                draw_circle(ass, sx, tr_cy, snap_r + 1.1, passed and C_FG or C_MUTED, op * (passed and 0.88 or 0.48), 0)
+                draw_circle(ass, sx, tr_cy, math.max(1.5, snap_r - 0.3), C_WHITE, op * 0.98, 0)
                 if sp.tag then
                     local align = (st <= 0.06) and 7 or ((st >= 0.94) and 9 or 8)
                     draw_txt(ass, sx, tr_cy + math.floor(9 * scale), align, sp.tag,
@@ -511,11 +507,12 @@ local function render_panel()
             end
         end
 
-        -- Tactile thumb handle (hover/drag grows smoothly)
+        -- Tactile thumb handle (concentric borderless fills for ultra-smooth anti-aliasing)
         local r_now = is_active and (thumb_r + math.floor(1.5 * scale)) or thumb_r
-        draw_circle(ass, fill_x, tr_cy + 1, r_now + 1, C_BGT, op * 0.14, 0)
-        draw_circle(ass, fill_x, tr_cy, r_now, C_WHITE, op,
-            math.max(2, 2.2 * scale), C_FG, op * (is_active and 1.0 or 0.92))
+        local ring_w = math.max(2, 2.2 * scale)
+        draw_circle(ass, fill_x, tr_cy + 1, r_now + 1.2, C_BGT, op * 0.12, 0)
+        draw_circle(ass, fill_x, tr_cy, r_now, C_FG, op * (is_active and 1.0 or 0.94), 0)
+        draw_circle(ass, fill_x, tr_cy, math.max(2, r_now - ring_w), C_WHITE, op, 0)
 
         -- Generous interactive hitbox for easy dragging & wheel nudging
         local hit_rect = {
@@ -548,14 +545,13 @@ local function render_panel()
     local f_gap = math.floor(6 * scale)
     local f_w = (cw - f_gap * (#FONTS - 1)) / #FONTS
     for idx, fn in ipairs(FONTS) do
-        local fx1 = cx1 + (idx - 1) * (f_w + f_gap)
-        local frect = { ax = fx1, ay = y, bx = fx1 + f_w, by = y + font_row_h }
+        local fx1 = math.floor(cx1 + (idx - 1) * (f_w + f_gap) + 0.5)
+        local frect = { ax = fx1, ay = y, bx = math.floor(fx1 + f_w + 0.5), by = y + font_row_h }
         local fid = "font_" .. idx
         local active = (tostring(options.fontname) == fn.id)
         local hov = (P.hover_id == fid)
         draw_rrect(ass, frect.ax, frect.ay, frect.bx, frect.by, math.floor(8 * scale),
-            active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.94, 1,
-            active and C_FG or C_BGT, op * (active and 0.35 or 0.12))
+            active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.96, 0)
         draw_txt(ass, (frect.ax + frect.bx) / 2, (frect.ay + frect.by) / 2, 5, fn.label,
             math.floor(12 * scale), active and C_WHITE or C_BGT, op, active)
         table.insert(P.hitboxes, {
@@ -596,13 +592,12 @@ local function render_panel()
     for i, tg in ipairs(toggles) do
         local row = math.floor((i - 1) / 3)
         local col = (i - 1) % 3
-        local tx1 = cx1 + col * (tg_w + tg_gap)
+        local tx1 = math.floor(cx1 + col * (tg_w + tg_gap) + 0.5)
         local ty1 = y + row * (toggle_row_h + tg_gap)
-        local trect = { ax = tx1, ay = ty1, bx = tx1 + tg_w, by = ty1 + toggle_row_h }
+        local trect = { ax = tx1, ay = ty1, bx = math.floor(tx1 + tg_w + 0.5), by = ty1 + toggle_row_h }
         local hov = (P.hover_id == tg.id)
         draw_rrect(ass, trect.ax, trect.ay, trect.bx, trect.by, math.floor(8 * scale),
-            tg.active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.94, 1,
-            tg.active and C_FG or C_BGT, op * (tg.active and 0.35 or 0.12))
+            tg.active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.96, 0)
         draw_txt(ass, (trect.ax + trect.bx) / 2, (trect.ay + trect.by) / 2, 5, tg.label,
             math.floor(11.8 * scale), tg.active and C_WHITE or C_BGT, op, tg.active)
         table.insert(P.hitboxes, {
@@ -614,13 +609,13 @@ local function render_panel()
 
     -- === Footer: Simplified/Traditional cycle + Reset ===
     local ch_val = math.floor(tonumber(options.chConvert) or 1)
-    local ch_label = ch_val == 1 and "简繁：统一简体" or (ch_val == 2 and "简繁：统一繁体" or "简繁：保持原文")
+    local ch_label = ch_val == 1 and "简繁：简体" or (ch_val == 2 and "简繁：繁体" or "简繁：原文")
     local foot_gap = math.floor(8 * scale)
     local ch_w = math.floor(cw * 0.56)
     local ch_rect = { ax = cx1, ay = y, bx = cx1 + ch_w, by = y + footer_h }
     local ch_hov = (P.hover_id == "btn_ch")
     draw_rrect(ass, ch_rect.ax, ch_rect.ay, ch_rect.bx, ch_rect.by, math.floor(8 * scale),
-        ch_hov and C_FG_SOFT or C_WHITE, op * 0.94, 1, C_BGT, op * 0.14)
+        ch_hov and C_FG_SOFT or C_WHITE, op * 0.96, 0)
     draw_txt(ass, (ch_rect.ax + ch_rect.bx) / 2, (ch_rect.ay + ch_rect.by) / 2, 5, ch_label,
         math.floor(12 * scale), C_BGT, op, false)
     table.insert(P.hitboxes, {
@@ -635,7 +630,7 @@ local function render_panel()
     local rst_rect = { ax = cx1 + ch_w + foot_gap, ay = y, bx = cx2, by = y + footer_h }
     local rst_hov = (P.hover_id == "btn_reset")
     draw_rrect(ass, rst_rect.ax, rst_rect.ay, rst_rect.bx, rst_rect.by, math.floor(8 * scale),
-        rst_hov and C_FG or C_WHITE, op * 0.94, 1, rst_hov and C_FG or C_BGT, op * 0.14)
+        rst_hov and C_FG or C_WHITE, op * 0.96, 0)
     draw_txt(ass, (rst_rect.ax + rst_rect.bx) / 2, (rst_rect.ay + rst_rect.by) / 2, 5, "恢复默认",
         math.floor(12 * scale), rst_hov and C_WHITE or C_MUTED, op, rst_hov)
     table.insert(P.hitboxes, {

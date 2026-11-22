@@ -1,0 +1,9 @@
+# Runtime caches and local state
+_cache/
+*.log
+*.tmp
+danmaku-history.json
+danmaku-ass/
+saved-shader-preset.json
+bangumi-auth.json
+bangumi-map.json

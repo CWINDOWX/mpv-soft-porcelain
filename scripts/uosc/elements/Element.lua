@@ -99,8 +99,11 @@ end
 
 -- Decide elements visibility based on proximity and various other factors
 function Element:get_visibility()
-	-- Hide when curtain is visible, unless this elements ignores it
-	local min_order = (Elements.curtain.opacity > 0 and not self.ignores_curtain) and Elements.curtain.render_order or 0
+	-- Hide when curtain is visible, unless this element ignores it or bottom bar stays visible for bottom-bar menu
+	local keep_controls = Elements.menu and Elements.menu.keep_controls_visible
+		and (self.id == 'controls' or self.id == 'timeline' or self.anchor_id == 'controls')
+	local min_order = (Elements.curtain.opacity > 0 and not self.ignores_curtain and not keep_controls)
+		and Elements.curtain.render_order or 0
 	if self.render_order < min_order then return 0 end
 
 	-- Persistency

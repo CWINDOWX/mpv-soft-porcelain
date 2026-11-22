@@ -34,6 +34,14 @@ local Menu = class(Element)
 function Menu:open(data, callback, opts)
 	local open_menu = Menu:is_open()
 	if open_menu then
+		opts = opts and table_assign({}, opts) or {}
+		if open_menu.keep_controls_visible then
+			opts.keep_controls_visible = true
+		end
+		-- Refreshing the same menu type (e.g. toggling a checkbox via open-menu): preserve exact anchor!
+		if open_menu.anchor and data.type and open_menu.type == data.type then
+			opts.inherit_anchor = open_menu.anchor
+		end
 		open_menu.is_being_replaced = true
 		open_menu:close(true)
 	end
@@ -137,13 +145,25 @@ function Menu:init(data, callback, opts)
 	self.submenu_dir = 1 -- 1 = right, -1 = left
 
 	-- Capture mouse anchor so right-click and bottom-bar menus pop up right where the user clicked
-	local mpos = mp.get_property_native('mouse-pos')
-	local cx = (mpos and mpos.hover and mpos.x) or (not cursor.hidden and cursor.x) or nil
-	local cy = (mpos and mpos.hover and mpos.y) or (not cursor.hidden and cursor.y) or nil
-	if cx and cy and cx >= 0 and cx <= display.width and cy >= 0 and cy <= display.height then
-		self.anchor = {x = cx, y = cy}
+	if self.opts.inherit_anchor then
+		self.anchor = self.opts.inherit_anchor
 	else
-		self.anchor = nil
+		local mpos = mp.get_property_native('mouse-pos')
+		local cx = (mpos and mpos.hover and mpos.x) or (not cursor.hidden and cursor.x) or nil
+		local cy = (mpos and mpos.hover and mpos.y) or (not cursor.hidden and cursor.y) or nil
+		if cx and cy and cx >= 0 and cx <= display.width and cy >= 0 and cy <= display.height then
+			self.anchor = {x = cx, y = cy}
+		else
+			self.anchor = nil
+		end
+	end
+
+	-- Keep bottom control bar visible when opened from (or chained from) the bottom bar
+	self.keep_controls_visible = self.opts.keep_controls_visible == true
+	if not self.keep_controls_visible and self.anchor and Elements.controls and Elements.controls.enabled and Elements.controls.ay then
+		if self.anchor.y >= Elements.controls.ay - round(16 * state.scale) then
+			self.keep_controls_visible = true
+		end
 	end
 
 	if utils.shared_script_property_set then
@@ -344,11 +364,16 @@ function Menu:get_viewport_bounds()
 	local wb = Elements:v('window_border', 'size', 0)
 	local vp = Elements:v('window_border', 'viewport')
 	local pad = round(10 * state.scale)
+	local by = (vp and vp.by or (display.height - wb)) - pad
+	if self.keep_controls_visible and Elements.controls and Elements.controls.enabled and Elements.controls.ay then
+		local dock_top = Elements.controls.ay - round(6 * state.scale)
+		by = math.min(by, dock_top - round(6 * state.scale))
+	end
 	return {
 		ax = (vp and vp.ax or wb) + pad,
 		ay = (vp and vp.ay or wb) + pad,
 		bx = (vp and vp.bx or (display.width - wb)) - pad,
-		by = (vp and vp.by or (display.height - wb)) - pad,
+		by = by,
 	}
 end
 
@@ -851,6 +876,17 @@ function Menu:handle_cursor_down()
 		self.drag_last_y = cursor.y
 		self.current.fling = nil
 	else
+		-- When bottom control bar stays visible, allow clicking bottom-bar buttons directly
+		-- (same button toggles closed; another button switches cleanly in one click!)
+		if self.keep_controls_visible and Elements.controls and Elements.controls.enabled then
+			for _, control in ipairs(Elements.controls.layout) do
+				local el = control.element
+				if el and el.enabled and el.proximity_raw <= 0 and el.handle_cursor_click then
+					el:handle_cursor_click()
+					return
+				end
+			end
+		end
 		self:close()
 	end
 end

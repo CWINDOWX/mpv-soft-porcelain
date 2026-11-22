@@ -329,7 +329,11 @@ local function mode_label(m)
     return "片尾弹窗确认（推荐）"
 end
 
-local function open_main_menu()
+local function open_main_menu(action)
+    if (not action or action == "open-menu") and mp.get_property("user-data/uosc/menu/type") == "bgm_main_menu" then
+        mp.commandv("script-message-to", "uosc", "close-menu")
+        return
+    end
     local items = {}
 
     if state.logged_in then
@@ -399,11 +403,11 @@ local function open_main_menu()
         footnote = "快捷键 Ctrl+B · 片尾剩余 " .. tostring(state.remaining_sec) .. " 秒触发",
         items = items
     }
-    mp.commandv("script-message-to", "uosc", "open-menu", utils.format_json(menu))
+    mp.commandv("script-message-to", "uosc", action or "open-menu", utils.format_json(menu))
 end
 
 -- Script messages
-mp.register_script_message("open-menu", open_main_menu)
+mp.register_script_message("open-menu", function() open_main_menu("open-menu") end)
 mp.register_script_message("mark-now", mark_current_watched)
 mp.register_script_message("skip-prompt", function()
     state.prompted = true
@@ -438,7 +442,7 @@ mp.register_script_message("cycle-mode", function()
     elseif state.mode == "auto" then state.mode = "manual"
     else state.mode = "prompt" end
     save_prefs()
-    open_main_menu()
+    open_main_menu("update-menu")
 end)
 
 mp.register_script_message("login-clipboard", function()

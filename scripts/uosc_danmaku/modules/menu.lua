@@ -1248,6 +1248,10 @@ local total_menu_items_config = {
 }
 
 function open_add_total_menu_uosc()
+    if mp.get_property("user-data/uosc/menu/type") == "menu_total" then
+        mp.commandv("script-message-to", "uosc", "close-menu")
+        return
+    end
     local items = {}
 
     if DANMAKU.anime and DANMAKU.episode then

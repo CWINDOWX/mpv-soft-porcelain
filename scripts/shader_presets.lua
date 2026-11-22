@@ -183,7 +183,11 @@ local function apply_state(show_osd)
     end
 end
 
-local function open_menu()
+local function open_menu(action)
+    if (not action or action == "open-menu") and mp.get_property("user-data/uosc/menu/type") == "shader_presets_menu" then
+        mp.commandv("script-message-to", "uosc", "close-menu")
+        return
+    end
     local items = {}
     for _, p in ipairs(PRESETS) do
         local selected = (p.id == state.preset)
@@ -220,7 +224,7 @@ local function open_menu()
         footnote = "切换后自动保存，下次打开 MPV 自动恢复（快捷键 A / D 循环切换）",
         items = items
     }
-    mp.commandv("script-message-to", "uosc", "open-menu", utils.format_json(menu))
+    mp.commandv("script-message-to", "uosc", action or "open-menu", utils.format_json(menu))
 end
 
 local function select_preset(id)
@@ -236,7 +240,7 @@ local function cycle_preset(delta)
     select_preset(PRESETS[next_idx].id)
 end
 
-mp.register_script_message("open-menu", open_menu)
+mp.register_script_message("open-menu", function() open_menu("open-menu") end)
 mp.register_script_message("select", select_preset)
 mp.register_script_message("prev", function() cycle_preset(-1) end)
 mp.register_script_message("next", function() cycle_preset(1) end)
@@ -244,13 +248,13 @@ mp.register_script_message("toggle-deband", function()
     state.deband = not state.deband
     save_state()
     apply_state(true)
-    open_menu()
+    open_menu("update-menu")
 end)
 mp.register_script_message("toggle-memc", function()
     state.memc = not state.memc
     save_state()
     apply_state(true)
-    open_menu()
+    open_menu("update-menu")
 end)
 
 -- Re-sync button when uosc reports ready

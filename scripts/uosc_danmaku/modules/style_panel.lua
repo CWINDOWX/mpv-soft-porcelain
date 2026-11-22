@@ -767,7 +767,6 @@ function close_danmaku_style_panel(instant)
     P.dragging = nil
     P.drag_rect = nil
     P.hover_id = nil
-    P.anchor = nil
     unbind_panel_keys()
     if uosc_available then
         mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "")
@@ -776,6 +775,7 @@ function close_danmaku_style_panel(instant)
 
     if instant or P.opacity <= 0.05 then
         P.opacity = 0
+        P.anchor = nil
         panel_overlay:remove()
         return
     end
@@ -789,6 +789,7 @@ function close_danmaku_style_panel(instant)
             P.fade_timer:kill()
             P.fade_timer = nil
             P.opacity = 0
+            P.anchor = nil
             panel_overlay:remove()
         end
     end)

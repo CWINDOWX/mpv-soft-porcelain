@@ -42,7 +42,9 @@ function Elements:update_proximities()
 			local previous_proximity_raw = element.proximity_raw
 
 			-- If curtain is open, we disable all elements set to rendered below it
-			if not element.ignores_curtain and element.render_order < curtain_render_order then
+			local keep_controls = Elements.menu and Elements.menu.keep_controls_visible
+				and (element.id == 'controls' or element.id == 'timeline' or element.anchor_id == 'controls')
+			if not element.ignores_curtain and not keep_controls and element.render_order < curtain_render_order then
 				element:reset_proximity()
 			else
 				element:update_proximity()

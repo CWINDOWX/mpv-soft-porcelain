@@ -64,8 +64,8 @@ function Button:render()
 		})
 	end
 
-	-- Tooltip on hover
-	if is_hover and self.tooltip then ass:tooltip(self, self.tooltip) end
+	-- Tooltip on hover (suppressed while a menu is open so it doesn't poke into popups)
+	if is_hover and self.tooltip and not Menu:is_open() then ass:tooltip(self, self.tooltip) end
 
 	-- Badge
 	local icon_clip

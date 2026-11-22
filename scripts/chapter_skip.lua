@@ -676,7 +676,13 @@ local function undo_auto_skip()
 end
 
 -- Script messages
-mp.register_script_message("open-menu", function() open_settings_menu("open-menu") end)
+mp.register_script_message("open-menu", function()
+    if mp.get_property("user-data/uosc/menu/type") == "chapter_skip_menu" then
+        mp.commandv("script-message-to", "uosc", "close-menu")
+        return
+    end
+    open_settings_menu("open-menu")
+end)
 mp.register_script_message("skip-now", skip_now_command)
 mp.register_script_message("undo-skip", undo_auto_skip)
 

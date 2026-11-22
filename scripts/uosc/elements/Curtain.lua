@@ -26,7 +26,12 @@ end
 function Curtain:render()
 	if self.opacity == 0 or config.opacity.curtain == 0 then return end
 	local ass = assdraw.ass_new()
-	ass:rect(0, 0, display.width, display.height, {
+	local by = display.height
+	if Elements.menu and Elements.menu.keep_controls_visible
+		and Elements.controls and Elements.controls.enabled and Elements.controls.ay then
+		by = Elements.controls.ay - round(6 * state.scale)
+	end
+	ass:rect(0, 0, display.width, by, {
 		color = config.color.curtain, opacity = config.opacity.curtain * self.opacity,
 	})
 	return ass

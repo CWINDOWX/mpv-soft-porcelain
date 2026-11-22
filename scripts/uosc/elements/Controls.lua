@@ -311,6 +311,7 @@ function Controls:register_badge_updater(badge, element)
 end
 
 function Controls:get_visibility()
+	if Elements.menu and Elements.menu.keep_controls_visible then return 1 end
 	return Elements:v('speed', 'dragging') and 1 or Elements:maybe('timeline', 'get_is_hovered')
 		and -1 or Element.get_visibility(self)
 end

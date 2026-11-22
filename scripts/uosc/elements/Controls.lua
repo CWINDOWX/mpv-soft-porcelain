@@ -19,7 +19,8 @@ local Controls = class(Element)
 
 function Controls:new() return Class.new(self) --[[@as Controls]] end
 function Controls:init()
-	Element.init(self, 'controls', {render_order = 6})
+	Element.init(self, 'controls', {render_order = 5.5})
+	self.child_render_order = 6
 	---@type ControlItem[] All control elements serialized from `options.controls`.
 	self.controls = {}
 	---@type ControlItem[] Only controls that match current dispositions.
@@ -152,7 +153,7 @@ function Controls:init_options()
 				))
 			else
 				local element = Button:new('control_' .. i, {
-					render_order = self.render_order,
+					render_order = self.child_render_order,
 					icon = params[1],
 					anchor_id = 'controls',
 					on_click = function() mp.command(params[2]) end,
@@ -184,7 +185,7 @@ function Controls:init_options()
 				end
 
 				local element = CycleButton:new('control_' .. i, {
-					render_order = self.render_order,
+					render_order = self.child_render_order,
 					prop = params[2],
 					anchor_id = 'controls',
 					states = states,
@@ -201,7 +202,7 @@ function Controls:init_options()
 			else
 				local element = ManagedButton:new('control_' .. i, {
 					name = params[1],
-					render_order = self.render_order,
+					render_order = self.child_render_order,
 					anchor_id = 'controls',
 					on_hide = function() self:reflow() end,
 				})
@@ -209,7 +210,7 @@ function Controls:init_options()
 			end
 		elseif kind == 'speed' then
 			if not Elements.speed then
-				local element = Speed:new({anchor_id = 'controls', render_order = self.render_order})
+				local element = Speed:new({anchor_id = 'controls', render_order = self.child_render_order})
 				local scale = tonumber(params[1]) or 1.3
 				table_assign(control, {
 					element = element, sizing = 'dynamic', scale = scale, ratio = 3.5, ratio_min = 2,
@@ -434,6 +435,38 @@ function Controls:destroy_elements()
 	for _, control in ipairs(self.controls) do
 		if control.element then control.element:destroy() end
 	end
+end
+
+function Controls:render()
+	local visibility = self:get_visibility()
+	if visibility <= 0 or not self.enabled then return end
+	if not self.ax or not self.bx or self.bx <= self.ax then return end
+
+	local ass = assdraw.ass_new()
+	local pad_x = round(8 * state.scale)
+	local pad_y = round(6 * state.scale)
+	local wb = Elements:v('window_border', 'size', 0)
+	local dax = math.max(wb + round(4 * state.scale), self.ax - pad_x)
+	local dbx = math.min(display.width - wb - round(4 * state.scale), self.bx + pad_x)
+	local day = self.ay - pad_y
+	local dby = self.by + pad_y
+	local dock_radius = state.radius + round(4 * state.scale)
+
+	-- Soft elevation shadow under floating porcelain control dock
+	ass:rect(dax, day + round(2 * state.scale), dbx, dby + round(3 * state.scale), {
+		color = bgt,
+		opacity = visibility * 0.09,
+		radius = dock_radius,
+	})
+	-- Frosted porcelain floating dock container framing all bottom controls cleanly
+	ass:rect(dax, day, dbx, dby, {
+		color = bg,
+		border = 1,
+		border_color = bgt,
+		opacity = {main = visibility * 0.62, border = visibility * 0.16},
+		radius = dock_radius,
+	})
+	return ass
 end
 
 function Controls:on_options()

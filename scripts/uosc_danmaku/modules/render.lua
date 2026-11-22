@@ -55,20 +55,25 @@ function render(pos_arg)
         return
     end
 
-    local fontname = options.fontname
-    local fontsize = options.fontsize
-    local opacity = tonumber(options.opacity)
-    local alpha = string.format("%02X", (1 - (opacity or 0)) * 255)
+    local fontname = tostring(options.fontname or "LXGW WenKai Mono Lite")
+    local fontsize = tonumber(options.fontsize) or 44
+    local opacity = tonumber(options.opacity) or 0.78
+    local displayarea_ratio = tonumber(options.displayarea) or 0.72
+    local scrolltime = tonumber(options.scrolltime) or 13
+    local fixtime = tonumber(options.fixtime) or 5
+    local alpha = string.format("%02X", math.floor((1 - math.max(0, math.min(1, opacity))) * 255 + 0.5))
 
     local width, height = 1920, 1080
-    local ratio = osd_width / osd_height
-    if width / height < ratio then
-        height = width / ratio
-        fontsize = options.fontsize - ratio * 2
+    if osd_width > 0 and osd_height > 0 then
+        local ratio = osd_width / osd_height
+        if width / height < ratio then
+            height = width / ratio
+            fontsize = fontsize - ratio * 2
+        end
     end
 
     local ass_events = {}
-    local max_display = math.max(options.scrolltime, options.fixtime)
+    local max_display = math.max(scrolltime, fixtime)
     local window_start = pos - max_display
 
     -- 跳过已结束的弹幕
@@ -77,30 +82,34 @@ function render(pos_arg)
     local re_entity = "&#%d+;"
     local re_fs = "\\fs(%d+)"
     local ass_prefix = string.format("{\\rDefault\\fn%s\\fs%d\\c&HFFFFFF&\\alpha&H%s\\bord%s\\shad%s\\b%s\\q2}",
-        fontname, fontsize, alpha, options.outline, options.shadow, options.bold and "1" or "0")
+        fontname, math.max(12, math.floor(fontsize)), alpha, tostring(options.outline or 1.2), tostring(options.shadow or 0.6), options.bold and "1" or "0")
 
+    local max_y = height * displayarea_ratio
     for i = lo, #COMMENTS do
         local event = COMMENTS[i]
         if not event then break end
 
         if event.start_time > pos then break end  -- 后续弹幕提前退出
         if event.end_time >= pos then
-            local text = realtime_position_text(event, pos, height * options.displayarea)
-            if text then
-                text = text:gsub(re_entity, "")
+            local blocked = (options.block_scroll and event.style == "R2L")
+                or (options.block_top and event.style == "TOP")
+                or (options.block_bottom and event.style == "BTM")
+            if not blocked then
+                local text = realtime_position_text(event, pos, max_y)
+                if text then
+                    text = text:gsub(re_entity, "")
+                    if options.block_color then
+                        text = text:gsub("{\\c&H[%x]+&}", "")
+                    end
+                    if text:match(re_fs) then
+                        text = text:gsub(re_fs, function(size)
+                            local n = tonumber(size) or 0
+                            return string.format("\\fs%d", math.floor(n * 1.5))
+                        end)
+                    end
+                    table.insert(ass_events, ass_prefix .. text)
+                end
             end
-
-            if text and text:match(re_fs) then
-                text = text:gsub(re_fs, function(size)
-                    local n = tonumber(size) or 0
-                    return string.format("\\fs%d", math.floor(n * 1.5))
-                end)
-            end
-
-            -- 构建 ASS 字符串
-            local ass_text = text and (ass_prefix .. text)
-
-            table.insert(ass_events, ass_text)
         end
     end
 

@@ -132,12 +132,13 @@ local ch_cache_max = 5000
 
 local function ch_convert_cached(text)
     if type(text) ~= "string" or text == "" then return text end
-    local cached = ch_convert_cache[text]
+    local cache_key = tostring(options.chConvert or 0) .. ":" .. text
+    local cached = ch_convert_cache[cache_key]
     if cached ~= nil then return cached end
 
     local converted = ch_convert(text)
-    ch_convert_cache[text] = converted
-    ch_cache_keys[#ch_cache_keys+1] = text
+    ch_convert_cache[cache_key] = converted
+    ch_cache_keys[#ch_cache_keys+1] = cache_key
 
     if #ch_cache_keys > ch_cache_max then
         local old_key = table.remove(ch_cache_keys, 1)

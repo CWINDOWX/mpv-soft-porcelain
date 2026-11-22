@@ -264,6 +264,11 @@ function Timeline:render()
 	ass:rect_cw(fax, bay, fbx, fay) --above progress
 	ass:draw_stop()
 
+	-- Crisp 1px top hairline boundary separating timeline bar from video
+	if visibility > 0 then
+		ass:rect(bax, bay, bbx, bay + 1, {color = bgt, opacity = visibility * 0.16})
+	end
+
 	-- Progress
 	local function draw_progress()
 		ass:rect(fax, fay, fbx, fby, {opacity = config.opacity.position})

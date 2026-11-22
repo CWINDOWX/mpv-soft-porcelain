@@ -51,6 +51,11 @@ options = {
     outline = 1.0,
     -- 限制屏幕中同时显示的最大弹幕数量，0 表示不限制
     max_screen_danmaku = 0,
+    -- 弹幕类型与颜色过滤（可在弹幕样式菜单中实时开关并自动保存）
+    block_top = false,
+    block_bottom = false,
+    block_scroll = false,
+    block_color = false,
     --指定弹幕屏蔽词文件路径(black.txt)，支持绝对路径和相对路径。文件内容以换行分隔
     --支持 lua 的正则表达式写法
     blacklist_path = "",
@@ -75,3 +80,44 @@ options = {
 }
 
 opt.read_options(options, mp.get_script_name(), function() end)
+
+-- 记录从配置文件读取的初始默认值，供样式菜单“恢复默认”使用
+local utils_opt = require("mp.utils")
+DANMAKU_STYLE_KEYS = {
+    "fontname", "fontsize", "opacity", "displayarea", "scrolltime", "fixtime",
+    "bold", "outline", "shadow", "max_screen_danmaku", "merge_tolerance", "chConvert",
+    "block_top", "block_bottom", "block_scroll", "block_color",
+}
+DANMAKU_STYLE_DEFAULTS = {}
+for _, k in ipairs(DANMAKU_STYLE_KEYS) do
+    DANMAKU_STYLE_DEFAULTS[k] = options[k]
+end
+
+DANMAKU_STYLE_PATH = mp.command_native({"expand-path", "~~/saved-danmaku-style.json"})
+
+function save_danmaku_style()
+    local payload = {}
+    for _, k in ipairs(DANMAKU_STYLE_KEYS) do
+        payload[k] = options[k]
+    end
+    local f = io.open(DANMAKU_STYLE_PATH, "wb")
+    if not f then return end
+    f:write(utils_opt.format_json(payload) or "{}")
+    f:close()
+end
+
+function load_saved_danmaku_style()
+    local f = io.open(DANMAKU_STYLE_PATH, "rb")
+    if not f then return end
+    local raw = f:read("*a")
+    f:close()
+    local parsed = raw and utils_opt.parse_json(raw)
+    if type(parsed) ~= "table" then return end
+    for _, k in ipairs(DANMAKU_STYLE_KEYS) do
+        if parsed[k] ~= nil then
+            options[k] = parsed[k]
+        end
+    end
+end
+
+load_saved_danmaku_style()

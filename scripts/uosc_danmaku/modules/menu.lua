@@ -635,57 +635,335 @@ function open_style_menu_get(query, indicator)
     })
 end
 
-function open_style_menu_uosc(actived, status)
-    local items = {}
-    for _, key in ipairs(ordered_keys) do
-        local config = menu_items_config[key]
-        local item_config = {
-            title = config.title,
-            hint = "目前：" .. tostring(config.hint),
-            active = key == actived,
-            keep_open = true,
-            selectable = true,
+local DANMAKU_STYLE_PRESETS = {
+    {
+        id = "comfort",
+        title = "清爽舒适（默认）",
+        hint = "44px · 78% · 避让字幕",
+        values = {
+            fontname = "LXGW WenKai Mono Lite", fontsize = 44, opacity = 0.78,
+            displayarea = 0.72, scrolltime = 13, fixtime = 5, bold = true,
+            outline = 1.2, shadow = 0.6, max_screen_danmaku = 0, merge_tolerance = 5,
+            block_top = false, block_bottom = false, block_scroll = false, block_color = false,
         }
-        if config.hint ~= config.original then
-            local original_str = tostring(config.original)
-            item_config.actions = {{icon = "refresh", name = key, label = "恢复默认配置 < " .. original_str .. " >"}}
-        end
-        table.insert(items, item_config)
+    },
+    {
+        id = "soft",
+        title = "淡雅护眼",
+        hint = "40px · 55% · 上半屏",
+        values = {
+            fontsize = 40, opacity = 0.55, displayarea = 0.50, scrolltime = 15,
+            fixtime = 4, bold = false, outline = 0.8, shadow = 0.4, max_screen_danmaku = 45,
+            block_bottom = true,
+        }
+    },
+    {
+        id = "clear_large",
+        title = "大字清晰",
+        hint = "56px · 88% · 粗体描边",
+        values = {
+            fontsize = 56, opacity = 0.88, displayarea = 0.72, scrolltime = 12,
+            fixtime = 5, bold = true, outline = 1.8, shadow = 1.0,
+        }
+    },
+    {
+        id = "minimal",
+        title = "极简不挡画面",
+        hint = "38px · 65% · 顶部35%",
+        values = {
+            fontsize = 38, opacity = 0.65, displayarea = 0.35, scrolltime = 14,
+            fixtime = 4, bold = false, outline = 1.0, shadow = 0.4, max_screen_danmaku = 30,
+            merge_tolerance = 8, block_top = true, block_bottom = true, block_color = true,
+        }
+    },
+    {
+        id = "party",
+        title = "高能狂欢",
+        hint = "46px · 88% · 全屏不限",
+        values = {
+            fontsize = 46, opacity = 0.88, displayarea = 0.95, scrolltime = 11,
+            fixtime = 5, bold = true, outline = 1.2, shadow = 0.6, max_screen_danmaku = 0,
+            merge_tolerance = 3, block_top = false, block_bottom = false, block_scroll = false, block_color = false,
+        }
+    },
+}
+
+local function style_num(v, fallback)
+    local n = tonumber(v)
+    return n ~= nil and n or fallback
+end
+
+local function style_approx(a, b)
+    return math.abs(style_num(a, -9999) - style_num(b, -8888)) < 0.015
+end
+
+local function build_danmaku_style_menu_props()
+    local script = mp.get_script_name()
+    local fs = math.floor(style_num(options.fontsize, 44) + 0.5)
+    local op = style_num(options.opacity, 0.78)
+    local op_pct = math.floor(op * 100 + 0.5)
+    local area = style_num(options.displayarea, 0.72)
+    local area_pct = math.floor(area * 100 + 0.5)
+    local st = math.floor(style_num(options.scrolltime, 13) + 0.5)
+    local ft = math.floor(style_num(options.fixtime, 5) + 0.5)
+    local ol = style_num(options.outline, 1.2)
+    local sh = style_num(options.shadow, 0.6)
+    local max_dm = math.floor(style_num(options.max_screen_danmaku, 0) + 0.5)
+    local merge_t = math.floor(style_num(options.merge_tolerance, 5) + 0.5)
+    local ch_conv = math.floor(style_num(options.chConvert, 1) + 0.5)
+
+    local function choice_item(title, hint, key, val, is_active)
+        return {
+            title = title,
+            hint = hint,
+            icon = is_active and "radio_button_checked" or "radio_button_unchecked",
+            active = is_active,
+            keep_open = true,
+            value = { "script-message-to", script, "dm-style-set", key, tostring(val) },
+        }
     end
 
-    local menu_props = {
-        type = "menu_style",
-        title = "弹幕样式",
-        search_style = "disabled",
-        footnote = "样式更改仅在本次播放生效",
-        item_actions_place = "outside",
-        items = items,
-        callback = { mp.get_script_name(), 'setup-danmaku-style'},
+    local function step_item(title, hint, key, delta, min_v, max_v, icon)
+        return {
+            title = title,
+            hint = hint,
+            icon = icon,
+            keep_open = true,
+            value = { "script-message-to", script, "dm-style-step", key, tostring(delta), tostring(min_v), tostring(max_v) },
+        }
+    end
+
+    local function toggle_item(title, hint_on, hint_off, key, enabled)
+        return {
+            title = title,
+            hint = enabled and hint_on or hint_off,
+            icon = enabled and "check_box" or "check_box_outline_blank",
+            active = enabled,
+            keep_open = true,
+            value = { "script-message-to", script, "dm-style-toggle", key },
+        }
+    end
+
+    -- 1. 一键风格预设
+    local preset_items = {}
+    for _, p in ipairs(DANMAKU_STYLE_PRESETS) do
+        table.insert(preset_items, {
+            title = p.title,
+            hint = p.hint,
+            icon = "auto_awesome",
+            keep_open = true,
+            value = { "script-message-to", script, "dm-style-preset", p.id },
+        })
+    end
+
+    -- 2. 字体大小
+    local fontsize_items = {
+        step_item("字号 −4", "当前 " .. fs .. " px", "fontsize", -4, 20, 90, "remove"),
+        step_item("字号 +4", "当前 " .. fs .. " px", "fontsize", 4, 20, 90, "add"),
+    }
+    fontsize_items[2].separator = true
+    for _, opt_row in ipairs({
+        {32, "极小 (32 px)", "紧凑不占屏"},
+        {38, "较小 (38 px)", "轻量观感"},
+        {44, "适中 (44 px)", "推荐默认"},
+        {50, "标准 (50 px)", "清晰易读"},
+        {56, "较大 (56 px)", "大屏舒适"},
+        {64, "特大 (64 px)", "远距/4K 屏"},
+        {72, "超大 (72 px)", "醒目字幕级"},
+    }) do
+        table.insert(fontsize_items, choice_item(opt_row[2], opt_row[3], "fontsize", opt_row[1], fs == opt_row[1]))
+    end
+
+    -- 3. 不透明度
+    local opacity_items = {
+        step_item("透明度 −10%", "当前 " .. op_pct .. "%", "opacity", -0.10, 0.10, 1.00, "remove"),
+        step_item("透明度 +10%", "当前 " .. op_pct .. "%", "opacity", 0.10, 0.10, 1.00, "add"),
+    }
+    opacity_items[2].separator = true
+    for _, opt_row in ipairs({
+        {0.30, "30%（极淡）", "几乎不干扰画面"},
+        {0.45, "45%（淡雅）", "轻柔半透明"},
+        {0.60, "60%（柔和）", "护眼适中"},
+        {0.78, "78%（推荐）", "清晰且通透"},
+        {0.90, "90%（醒目）", "接近不透明"},
+        {1.00, "100%（完全不透明）", "最高对比度"},
+    }) do
+        table.insert(opacity_items, choice_item(opt_row[2], opt_row[3], "opacity", opt_row[1], style_approx(op, opt_row[1])))
+    end
+
+    -- 4. 显示区域
+    local area_items = {}
+    for _, opt_row in ipairs({
+        {0.25, "顶部 25%", "极简不遮主体"},
+        {0.45, "上半屏 45%", "留出人物与字幕"},
+        {0.60, "上方 60%", "平衡视野"},
+        {0.72, "避让字幕 72%", "推荐 · 不挡底部字幕"},
+        {0.85, "宽幅 85%", "更多同屏轨道"},
+        {1.00, "全屏 100%", "完整覆盖"},
+    }) do
+        table.insert(area_items, choice_item(opt_row[2], opt_row[3], "displayarea", opt_row[1], style_approx(area, opt_row[1])))
+    end
+
+    -- 5. 滚动速度
+    local speed_items = {
+        step_item("更慢 (+2 秒)", "当前 " .. st .. " 秒滚完", "scrolltime", 2, 4, 25, "remove"),
+        step_item("更快 (−2 秒)", "当前 " .. st .. " 秒滚完", "scrolltime", -2, 4, 25, "add"),
+    }
+    speed_items[2].separator = true
+    for _, opt_row in ipairs({
+        {18, "极慢 (18 秒)", "从容阅读长弹幕"},
+        {15, "柔和 (15 秒)", "轻松舒缓"},
+        {13, "标准 (13 秒)", "推荐节奏"},
+        {10, "较快 (10 秒)", "紧凑明快"},
+        {8,  "快速 (8 秒)",  "高密弹幕不滞留"},
+        {6,  "飞速 (6 秒)",  "极速掠过"},
+    }) do
+        table.insert(speed_items, choice_item(opt_row[2], opt_row[3], "scrolltime", opt_row[1], st == opt_row[1]))
+    end
+
+    -- 6. 字体与外观（字体/粗体/描边/阴影/固定弹幕时长）
+    local font_items = {}
+    for _, frow in ipairs({
+        {"LXGW WenKai Mono Lite", "霞鹜文楷 Mono（内置推荐）", "柔和书卷质感"},
+        {"Microsoft YaHei UI",    "微软雅黑 UI",            "现代无衬线"},
+        {"SimHei",                "黑体 (SimHei)",          "经典醒目"},
+        {"YouYuan",               "幼圆 (YouYuan)",         "圆润轻快"},
+        {"sans-serif",            "系统默认无衬线",          "自动回退"},
+    }) do
+        table.insert(font_items, choice_item(frow[2], frow[3], "fontname", frow[1], tostring(options.fontname) == frow[1]))
+    end
+
+    local outline_items = {}
+    for _, orow in ipairs({
+        {0.0, "无描边 (0.0)", "纯粹无边"},
+        {0.8, "细描边 (0.8)", "轻巧干净"},
+        {1.2, "标准描边 (1.2)", "推荐默认"},
+        {1.8, "加粗描边 (1.8)", "亮画面更清晰"},
+        {2.5, "厚描边 (2.5)", "高反差醒目"},
+        {3.5, "超厚描边 (3.5)", "极强边缘"},
+    }) do
+        table.insert(outline_items, choice_item(orow[2], orow[3], "outline", orow[1], style_approx(ol, orow[1])))
+    end
+
+    local shadow_items = {}
+    for _, srow in ipairs({
+        {0.0, "无阴影 (0.0)", "扁平轻盈"},
+        {0.6, "轻阴影 (0.6)", "推荐默认"},
+        {1.2, "中等阴影 (1.2)", "层次更立体"},
+        {2.0, "深阴影 (2.0)", "强对比度"},
+    }) do
+        table.insert(shadow_items, choice_item(srow[2], srow[3], "shadow", srow[1], style_approx(sh, srow[1])))
+    end
+
+    local fixtime_items = {}
+    for _, trow in ipairs({
+        {3, "3 秒（短暂）", "减少遮挡"},
+        {5, "5 秒（标准）", "推荐默认"},
+        {7, "7 秒（较久）", "方便细看注释"},
+    }) do
+        table.insert(fixtime_items, choice_item(trow[2], trow[3], "fixtime", trow[1], ft == trow[1]))
+    end
+
+    local appearance_items = {
+        { id = "style_font", title = "弹幕字体", hint = tostring(options.fontname), items = font_items },
+        toggle_item("字体加粗", "已开启粗体", "常规字重", "bold", options.bold == true),
+        { id = "style_outline", title = "描边粗细", hint = string.format("%.1f", ol), items = outline_items },
+        { id = "style_shadow", title = "阴影深度", hint = string.format("%.1f", sh), items = shadow_items },
+        { id = "style_fixtime", title = "顶部/底部弹幕停留时间", hint = ft .. " 秒", items = fixtime_items },
     }
 
-    local actions = "open-menu"
-    if status ~= nil then
-        -- msg.info(status)
-        if status == "updata" then
-            -- "updata" 模式会保留输入框文字
-            menu_props.title = "  " .. menu_items_config[actived]["footnote"]
-            actions = "update-menu"
-        elseif status == "refresh" then
-            -- "refresh" 模式会清除输入框文字
-            menu_props.title = "  " .. menu_items_config[actived]["footnote"]
-        elseif status == "error" then
-            menu_props.title = "输入非数字字符或范围出错"
-            -- 创建一个定时器，在1秒后触发回调函数，删除搜索栏错误信息
-            mp.add_timeout(1.0, function() open_style_menu_uosc(actived, "updata") end)
-        end
-        menu_props.search_style = "palette"
-        menu_props.search_debounce = "submit"
-        menu_props.footnote = menu_items_config[actived]["footnote"] or ""
-        menu_props.on_search = { "script-message-to", mp.get_script_name(), "setup-danmaku-style", actived }
+    -- 7. 屏蔽与过滤
+    local density_items = {}
+    for _, drow in ipairs({
+        {0,   "不限制",     "显示全部弹幕"},
+        {25,  "精简 (25条)", "画面极度清爽"},
+        {45,  "适中 (45条)", "日常番剧舒适"},
+        {70,  "较多 (70条)", "保留高能氛围"},
+        {100, "高密 (100条)", "仅防极端刷屏"},
+    }) do
+        table.insert(density_items, choice_item(drow[2], drow[3], "max_screen_danmaku", drow[1], max_dm == drow[1]))
     end
 
-    local json_props = utils.format_json(menu_props)
-    mp.commandv("script-message-to", "uosc", actions, json_props)
+    local merge_items = {}
+    for _, mrow in ipairs({
+        {-1, "关闭合并",   "保留全部重复弹幕"},
+        {3,  "3 秒内合并", "轻度去重"},
+        {5,  "5 秒内合并", "推荐默认（显示 xN）"},
+        {10, "10 秒内合并", "强力去刷屏"},
+        {15, "15 秒内合并", "极简去重"},
+    }) do
+        table.insert(merge_items, choice_item(mrow[2], mrow[3], "merge_tolerance", mrow[1], merge_t == mrow[1]))
+    end
+
+    local ch_items = {
+        choice_item("不转换（保持原文）", "简繁原样显示", "chConvert", 0, ch_conv == 0),
+        choice_item("统一转换为简体中文", "推荐默认", "chConvert", 1, ch_conv == 1),
+        choice_item("统一转换为繁体中文", "繁中显示", "chConvert", 2, ch_conv == 2),
+    }
+
+    local filter_tags = {}
+    if options.block_top then table.insert(filter_tags, "禁顶") end
+    if options.block_bottom then table.insert(filter_tags, "禁底") end
+    if options.block_scroll then table.insert(filter_tags, "禁滚") end
+    if options.block_color then table.insert(filter_tags, "纯白") end
+    if max_dm > 0 then table.insert(filter_tags, "≤" .. max_dm .. "条") end
+    local filter_summary = #filter_tags > 0 and table.concat(filter_tags, " · ") or "全类型显示"
+
+    local filter_items = {
+        toggle_item("屏蔽顶部固定弹幕", "已屏蔽", "正常显示", "block_top", options.block_top == true),
+        toggle_item("屏蔽底部固定弹幕", "已屏蔽", "正常显示", "block_bottom", options.block_bottom == true),
+        toggle_item("屏蔽滚动弹幕", "已屏蔽", "正常显示", "block_scroll", options.block_scroll == true),
+        toggle_item("屏蔽彩色弹幕（统一纯白）", "已统一白色", "保留原色", "block_color", options.block_color == true),
+    }
+    filter_items[4].separator = true
+    table.insert(filter_items, {
+        id = "style_density", title = "同屏弹幕数量上限",
+        hint = max_dm > 0 and (max_dm .. " 条") or "不限",
+        items = density_items,
+    })
+    table.insert(filter_items, {
+        id = "style_merge", title = "重复刷屏弹幕合并",
+        hint = merge_t >= 0 and (merge_t .. " 秒") or "已关闭",
+        items = merge_items,
+    })
+    table.insert(filter_items, {
+        id = "style_chconv", title = "弹幕简繁转换",
+        hint = ch_conv == 1 and "统一简体" or (ch_conv == 2 and "统一繁体" or "保持原文"),
+        items = ch_items,
+    })
+
+    local area_label = area_pct .. "%" .. (area_pct == 72 and " 避让字幕" or "")
+    local font_short = tostring(options.fontname):gsub("LXGW WenKai Mono Lite", "霞鹜文楷"):gsub("Microsoft YaHei UI", "微软雅黑")
+
+    return {
+        type = "menu_style",
+        id = "menu_style_root",
+        title = "弹幕样式与过滤（实时生效 · 自动保存）",
+        search_style = "disabled",
+        footnote = "点击任意项直接选择档位，无需手动输入数字；所有更改自动记住",
+        items = {
+            { id = "style_presets", title = "一键风格预设", hint = "5 套精选方案", separator = true, items = preset_items },
+            { id = "style_fontsize", title = "字体大小", hint = fs .. " px", items = fontsize_items },
+            { id = "style_opacity", title = "不透明度", hint = op_pct .. "%", items = opacity_items },
+            { id = "style_area", title = "显示区域", hint = area_label, items = area_items },
+            { id = "style_speed", title = "滚动速度", hint = st .. " 秒", items = speed_items },
+            { id = "style_appearance", title = "字体 · 粗细 · 描边 · 阴影", hint = font_short .. (options.bold and " · 粗" or ""), items = appearance_items },
+            { id = "style_filters", title = "屏蔽类型 · 密度 · 去重 · 简繁", hint = filter_summary, separator = true, items = filter_items },
+            {
+                title = "恢复全部默认弹幕样式",
+                hint = "重置并保存",
+                icon = "restart_alt",
+                keep_open = true,
+                value = { "script-message-to", script, "dm-style-reset" },
+            },
+        },
+    }
+end
+
+function open_style_menu_uosc(actived, status)
+    local action = (status == "update") and "update-menu" or "open-menu"
+    local menu_props = build_danmaku_style_menu_props()
+    mp.commandv("script-message-to", "uosc", action, utils.format_json(menu_props))
 end
 
 function open_style_menu(actived, status)
@@ -1181,6 +1459,95 @@ mp.register_script_message("open-latest-menu-anime", function ()
             open_menu_select(utils.parse_json(latest_menu_anime))
         end)
     end
+end)
+
+local REBUILD_STYLE_KEYS = {
+    fontsize = true,
+    scrolltime = true,
+    fixtime = true,
+    max_screen_danmaku = true,
+    merge_tolerance = true,
+    chConvert = true,
+}
+
+local function apply_danmaku_style_change(need_rebuild, toast)
+    if type(save_danmaku_style) == "function" then
+        save_danmaku_style()
+    end
+    if ENABLED and COMMENTS ~= nil then
+        if need_rebuild and type(convert_danmaku_to_ass_events) == "function" then
+            convert_danmaku_to_ass_events(true)
+        end
+        if type(render) == "function" then
+            render()
+        end
+    end
+    if toast then
+        mp.osd_message(toast, 1.8)
+    end
+    if uosc_available then
+        open_style_menu_uosc(nil, "update")
+    end
+end
+
+mp.register_script_message("dm-style-set", function(key, val)
+    if not key then return end
+    if key == "fontname" then
+        options[key] = tostring(val)
+    elseif key == "bold" or key == "block_top" or key == "block_bottom" or key == "block_scroll" or key == "block_color" then
+        options[key] = (val == "true" or val == "yes" or val == "1")
+    else
+        local num = tonumber(val)
+        if not num then return end
+        options[key] = num
+    end
+    apply_danmaku_style_change(REBUILD_STYLE_KEYS[key] == true)
+end)
+
+mp.register_script_message("dm-style-step", function(key, delta_str, min_str, max_str)
+    local delta = tonumber(delta_str)
+    local min_v = tonumber(min_str)
+    local max_v = tonumber(max_str)
+    if not key or not delta then return end
+    local cur = tonumber(options[key]) or 0
+    local nxt = cur + delta
+    if min_v and nxt < min_v then nxt = min_v end
+    if max_v and nxt > max_v then nxt = max_v end
+    -- Keep clean rounding for decimals vs integers
+    if math.abs(delta) < 1 then
+        nxt = math.floor(nxt * 100 + 0.5) / 100
+    else
+        nxt = math.floor(nxt + 0.5)
+    end
+    options[key] = nxt
+    apply_danmaku_style_change(REBUILD_STYLE_KEYS[key] == true)
+end)
+
+mp.register_script_message("dm-style-toggle", function(key)
+    if not key then return end
+    options[key] = not (options[key] == true)
+    apply_danmaku_style_change(false)
+end)
+
+mp.register_script_message("dm-style-preset", function(preset_id)
+    for _, p in ipairs(DANMAKU_STYLE_PRESETS) do
+        if p.id == preset_id then
+            for k, v in pairs(p.values) do
+                options[k] = v
+            end
+            apply_danmaku_style_change(true, "已切换弹幕风格：" .. p.title .. "（已记住）")
+            return
+        end
+    end
+end)
+
+mp.register_script_message("dm-style-reset", function()
+    if type(DANMAKU_STYLE_DEFAULTS) == "table" then
+        for k, v in pairs(DANMAKU_STYLE_DEFAULTS) do
+            options[k] = v
+        end
+    end
+    apply_danmaku_style_change(true, "已恢复默认弹幕样式")
 end)
 
 mp.register_script_message("setup-danmaku-style", function(query, text)

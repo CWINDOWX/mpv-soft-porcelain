@@ -231,6 +231,16 @@ function TopBar:render()
 	local ax, ay, bx, by = self.ax, self.ay, self.bx, self.ay + self.size
 	local margin = math.floor((self.size - self.font_size) / 4)
 
+	-- Subtle frosted porcelain header strip anchoring the top bar cleanly
+	ass:rect(ax, ay, bx, by + round(2 * state.scale), {
+		color = bg,
+		opacity = visibility * 0.56,
+	})
+	ass:rect(ax, by + round(2 * state.scale), bx, by + round(3 * state.scale), {
+		color = bgt,
+		opacity = visibility * 0.14,
+	})
+
 	-- Window controls
 	if options.top_bar_controls then
 		local is_left, button_ax = options.top_bar_controls == 'left', 0

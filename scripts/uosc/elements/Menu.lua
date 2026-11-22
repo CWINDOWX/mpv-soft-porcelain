@@ -353,22 +353,70 @@ function Menu:get_viewport_bounds()
 end
 
 function Menu:get_base_ax(menu)
-	local card_w = menu.width + self.padding * 2
+	local draw_w = (self.anchor and menu.placed_width) or menu.width
+	local card_w = draw_w + self.padding * 2
 	if not self.anchor then
 		return round((display.width - card_w) / 2)
 	end
 	local vp = self:get_viewport_bounds()
+	if menu.placed_x then
+		return round(clamp(vp.ax, menu.placed_x, math.max(vp.ax, vp.bx - card_w)))
+	end
 	local gap_x = round(6 * state.scale)
 	local right_ax = round(self.anchor.x + gap_x)
 	local left_ax = round(self.anchor.x - gap_x - card_w)
+	local ax
 	-- Open to the right of cursor if space allows; otherwise flip cleanly to the left
 	if right_ax + card_w <= vp.bx then
-		return math.max(vp.ax, right_ax)
+		ax = math.max(vp.ax, right_ax)
 	elseif left_ax >= vp.ax then
-		return math.min(vp.bx - card_w, left_ax)
+		ax = math.min(vp.bx - card_w, left_ax)
 	else
-		return round(clamp(vp.ax, self.anchor.x - card_w / 2, math.max(vp.ax, vp.bx - card_w)))
+		ax = round(clamp(vp.ax, self.anchor.x - card_w / 2, math.max(vp.ax, vp.bx - card_w)))
 	end
+	menu.placed_x = ax
+	menu.placed_width = menu.width
+	return ax
+end
+
+function Menu:compute_submenu_placement(parent_ax, parent_bx, sub_menu, prefer_dir)
+	local vp = self:get_viewport_bounds()
+	local sub_w = sub_menu.width
+	local sub_card_w = sub_w + self.padding * 2
+	local right_room = vp.bx - (parent_bx + self.gap)
+	local left_room = (parent_ax - self.gap) - vp.ax
+	local sub_dir, sub_x
+
+	if prefer_dir == -1 then
+		if left_room >= sub_card_w then
+			sub_dir = -1
+		elseif right_room >= sub_card_w then
+			sub_dir = 1
+		else
+			sub_dir = (left_room >= right_room) and -1 or 1
+		end
+	else
+		if right_room >= sub_card_w then
+			sub_dir = 1
+		elseif left_room >= sub_card_w then
+			sub_dir = -1
+		else
+			sub_dir = (right_room >= left_room) and 1 or -1
+		end
+	end
+
+	if sub_dir == 1 then
+		if right_room < sub_card_w then
+			sub_w = math.max(140, right_room - self.padding * 2)
+		end
+		sub_x = parent_bx + self.gap
+	else
+		if left_room < sub_card_w then
+			sub_w = math.max(140, left_room - self.padding * 2)
+		end
+		sub_x = parent_ax - self.gap - (sub_w + self.padding * 2)
+	end
+	return sub_x, sub_w, sub_dir
 end
 
 function Menu:update_dimensions()
@@ -433,9 +481,10 @@ end
 -- Updates element coordinates to match padding box of currently open (sub)menu.
 function Menu:update_coordinates()
 	local ax = self:get_base_ax(self.current) + self.offset_x
+	local draw_w = (self.anchor and self.current.placed_width) or self.current.width
 	self:set_coordinates(
 		ax, self.current.top - self.padding,
-		ax + self.current.width + self.padding * 2, self.current.top + self.current.height + self.padding
+		ax + draw_w + self.padding * 2, self.current.top + self.current.height + self.padding
 	)
 end
 
@@ -674,6 +723,12 @@ end
 function Menu:slide_in_menu(id, x)
 	local menu = self:get_menu(id)
 	if not menu then return end
+	if self.anchor then
+		self.offset_x = 0
+		self:activate_menu(id)
+		self.opacity = 1
+		return
+	end
 	self:activate_menu(id)
 	local target_ax = self:get_base_ax(menu)
 	self:tween(x - target_ax, 0, function(offset) self:set_offset_x(offset) end)
@@ -687,6 +742,12 @@ function Menu:back()
 	local parent = current.parent_menu
 
 	if parent then
+		if self.anchor then
+			self.offset_x = 0
+			self:activate_menu(parent.id)
+			self.opacity = 1
+			return
+		end
 		local from_x = parent.drawn_x or (self.ax - parent.width - self.padding * 2 - self.gap)
 		self:slide_in_menu(parent.id, from_x)
 	else
@@ -704,6 +765,24 @@ function Menu:activate_selected_item(shortcut, is_pointer)
 		if item.items then
 			if not self.mouse_nav then
 				self:select_index(1, item.id)
+			end
+			if self.anchor then
+				-- Keep parent & submenu anchored in place so clicking an option never swaps their direction!
+				menu.placed_x = self.ax
+				menu.placed_width = menu.placed_width or menu.width
+				if not item.placed_x then
+					local sub_x, sub_w, sub_dir = self:compute_submenu_placement(
+						self.ax, self.bx, item --[[@as MenuStack]], menu.placed_dir
+					)
+					item.placed_x = sub_x
+					item.placed_width = sub_w
+					item.placed_dir = sub_dir
+					self.submenu_dir = sub_dir
+				end
+				self.offset_x = 0
+				self:activate_menu(item.id)
+				self.opacity = 1
+				return
 			end
 			local prev_ax, prev_bx = self.ax, self.bx
 			local sub_card_w = item.width + self.padding * 2
@@ -756,7 +835,14 @@ function Menu:move_selected_item_by(delta)
 	end
 end
 
-function Menu:on_display() self:update_dimensions() end
+function Menu:on_display()
+	for _, menu in ipairs(self.all) do
+		menu.placed_x = nil
+		menu.placed_width = nil
+		menu.placed_dir = nil
+	end
+	self:update_dimensions()
+end
 function Menu:on_prop_fullormaxed() self:update_content_dimensions() end
 function Menu:on_options() self:update_content_dimensions() end
 
@@ -1521,25 +1607,13 @@ function Menu:render()
 		local submenu_is_hovered = false
 		local sub_dir = 1
 		if current_item and current_item.items then
-			local vp = self:get_viewport_bounds()
-			local sub_w = current_item.width
-			local sub_card_w = sub_w + self.padding * 2
-			local right_room = vp.bx - (bg_rect.bx + self.gap)
-			local left_room = (bg_rect.ax - self.gap) - vp.ax
-			local sub_x
-			if right_room >= sub_card_w or (right_room >= left_room) then
-				sub_dir = 1
-				if right_room < sub_card_w then
-					sub_w = math.max(140, right_room - self.padding * 2)
-				end
-				sub_x = bg_rect.bx + self.gap
-			else
-				sub_dir = -1
-				if left_room < sub_card_w then
-					sub_w = math.max(140, left_room - self.padding * 2)
-				end
-				sub_x = bg_rect.ax - self.gap - (sub_w + self.padding * 2)
-			end
+			local sub_x, sub_w
+			sub_x, sub_w, sub_dir = self:compute_submenu_placement(
+				bg_rect.ax, bg_rect.bx, current_item --[[@as MenuStack]], menu.placed_dir
+			)
+			current_item.placed_x = sub_x
+			current_item.placed_width = sub_w
+			current_item.placed_dir = sub_dir
 			self.submenu_dir = sub_dir
 			submenu_rect = draw_menu(current_item --[[@as MenuStack]], sub_x, 1, sub_w)
 			cursor:zone('primary_down', submenu_rect, self:create_action(function(shortcut)
@@ -1919,18 +1993,23 @@ function Menu:render()
 	end
 
 	-- Active menu
-	draw_menu(self.current, self.ax, 0)
+	draw_menu(self.current, self.ax, 0, self.anchor and self.current.placed_width or nil)
 
-	-- Parent menus (place on left if room, else flip to right so parent stays clickable)
+	-- Parent menus (preserve anchored position so clicking into a submenu never swaps sides!)
 	local vp_bounds = self:get_viewport_bounds()
 	local parent_menu = self.current.parent_menu
 	local parent_left_edge, parent_right_edge = self.ax, self.bx
 	local parent_horizontal_index = -1
 
 	while parent_menu do
-		local p_card_w = parent_menu.width + self.padding * 2
+		local p_w = (self.anchor and parent_menu.placed_width) or parent_menu.width
+		local p_card_w = p_w + self.padding * 2
 		local px
-		if parent_left_edge - p_card_w - self.gap >= vp_bounds.ax then
+		if self.anchor and parent_menu.placed_x then
+			px = parent_menu.placed_x
+			parent_left_edge = math.min(parent_left_edge, px)
+			parent_right_edge = math.max(parent_right_edge, px + p_card_w)
+		elseif parent_left_edge - p_card_w - self.gap >= vp_bounds.ax then
 			px = parent_left_edge - p_card_w - self.gap
 			parent_left_edge = px
 		else
@@ -1938,7 +2017,7 @@ function Menu:render()
 			parent_right_edge = px + p_card_w
 		end
 		parent_menu.drawn_x = px
-		draw_menu(parent_menu, px, parent_horizontal_index)
+		draw_menu(parent_menu, px, parent_horizontal_index, self.anchor and parent_menu.placed_width or nil)
 		parent_horizontal_index = parent_horizontal_index - 1
 		parent_menu = parent_menu.parent_menu
 	end

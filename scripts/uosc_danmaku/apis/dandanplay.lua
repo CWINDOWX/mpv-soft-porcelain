@@ -69,6 +69,7 @@ function make_danmaku_request_args(method, url, headers, body)
     local args = {
         "curl",
         "-L",
+        "--compressed",
         "-X",
         method,
         "-H",

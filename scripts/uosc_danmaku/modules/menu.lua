@@ -639,20 +639,20 @@ local DANMAKU_STYLE_PRESETS = {
     {
         id = "comfort",
         title = "清爽舒适（默认）",
-        hint = "44px · 78% · 避让字幕",
+        hint = "36px · 78% · 避让字幕",
         values = {
-            fontname = "LXGW WenKai Mono Lite", fontsize = 44, opacity = 0.78,
+            fontname = "LXGW WenKai Mono Lite", fontsize = 36, opacity = 0.78,
             displayarea = 0.72, scrolltime = 13, fixtime = 5, bold = true,
-            outline = 1.2, shadow = 0.6, max_screen_danmaku = 0, merge_tolerance = 5,
+            outline = 1.0, shadow = 0.5, max_screen_danmaku = 0, merge_tolerance = 5,
             block_top = false, block_bottom = false, block_scroll = false, block_color = false,
         }
     },
     {
         id = "soft",
         title = "淡雅护眼",
-        hint = "40px · 55% · 上半屏",
+        hint = "32px · 55% · 上半屏",
         values = {
-            fontsize = 40, opacity = 0.55, displayarea = 0.50, scrolltime = 15,
+            fontsize = 32, opacity = 0.55, displayarea = 0.50, scrolltime = 15,
             fixtime = 4, bold = false, outline = 0.8, shadow = 0.4, max_screen_danmaku = 45,
             block_bottom = true,
         }
@@ -660,29 +660,29 @@ local DANMAKU_STYLE_PRESETS = {
     {
         id = "clear_large",
         title = "大字清晰",
-        hint = "56px · 88% · 粗体描边",
+        hint = "46px · 88% · 粗体描边",
         values = {
-            fontsize = 56, opacity = 0.88, displayarea = 0.72, scrolltime = 12,
-            fixtime = 5, bold = true, outline = 1.8, shadow = 1.0,
+            fontsize = 46, opacity = 0.88, displayarea = 0.72, scrolltime = 12,
+            fixtime = 5, bold = true, outline = 1.6, shadow = 0.9,
         }
     },
     {
         id = "minimal",
         title = "极简不挡画面",
-        hint = "38px · 65% · 顶部35%",
+        hint = "30px · 65% · 顶部35%",
         values = {
-            fontsize = 38, opacity = 0.65, displayarea = 0.35, scrolltime = 14,
-            fixtime = 4, bold = false, outline = 1.0, shadow = 0.4, max_screen_danmaku = 30,
+            fontsize = 30, opacity = 0.65, displayarea = 0.35, scrolltime = 14,
+            fixtime = 4, bold = false, outline = 0.8, shadow = 0.4, max_screen_danmaku = 30,
             merge_tolerance = 8, block_top = true, block_bottom = true, block_color = true,
         }
     },
     {
         id = "party",
         title = "高能狂欢",
-        hint = "46px · 88% · 全屏不限",
+        hint = "38px · 88% · 全屏不限",
         values = {
-            fontsize = 46, opacity = 0.88, displayarea = 0.95, scrolltime = 11,
-            fixtime = 5, bold = true, outline = 1.2, shadow = 0.6, max_screen_danmaku = 0,
+            fontsize = 38, opacity = 0.88, displayarea = 0.95, scrolltime = 11,
+            fixtime = 5, bold = true, outline = 1.0, shadow = 0.5, max_screen_danmaku = 0,
             merge_tolerance = 3, block_top = false, block_bottom = false, block_scroll = false, block_color = false,
         }
     },
@@ -756,20 +756,20 @@ local function build_danmaku_style_menu_props()
         })
     end
 
-    -- 2. 字体大小
+    -- 2. 字体大小（按真实观感校准档位 + 精细 ±2 步进）
     local fontsize_items = {
-        step_item("字号 −4", "当前 " .. fs .. " px", "fontsize", -4, 20, 90, "remove"),
-        step_item("字号 +4", "当前 " .. fs .. " px", "fontsize", 4, 20, 90, "add"),
+        step_item("字号 −2", "当前 " .. fs .. " px", "fontsize", -2, 18, 76, "remove"),
+        step_item("字号 +2", "当前 " .. fs .. " px", "fontsize", 2, 18, 76, "add"),
     }
     fontsize_items[2].separator = true
     for _, opt_row in ipairs({
-        {32, "极小 (32 px)", "紧凑不占屏"},
-        {38, "较小 (38 px)", "轻量观感"},
-        {44, "适中 (44 px)", "推荐默认"},
-        {50, "标准 (50 px)", "清晰易读"},
-        {56, "较大 (56 px)", "大屏舒适"},
-        {64, "特大 (64 px)", "远距/4K 屏"},
-        {72, "超大 (72 px)", "醒目字幕级"},
+        {24, "超小 (24 px)", "极简轻盈不抢戏"},
+        {28, "极小 (28 px)", "细腻紧凑"},
+        {32, "较小 (32 px)", "清爽通透"},
+        {36, "适中 (36 px)", "推荐默认 · 舒适易读"},
+        {42, "偏大 (42 px)", "清晰醒目"},
+        {48, "较大 (48 px)", "大屏 / 远距观看"},
+        {56, "特大 (56 px)", "高分屏醒目"},
     }) do
         table.insert(fontsize_items, choice_item(opt_row[2], opt_row[3], "fontsize", opt_row[1], fs == opt_row[1]))
     end

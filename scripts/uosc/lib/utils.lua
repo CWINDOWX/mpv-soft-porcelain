@@ -94,38 +94,38 @@ function tween(from, to, setter, duration_or_callback, callback)
 	if type(duration_or_callback) == 'function' then callback = duration_or_callback end
 	if type(duration) ~= 'number' then duration = options.animation_duration end
 
-	local current, done, timeout = from, false, nil
+	local done, timeout = false, nil
 	local get_to = type(to) == 'function' and to or function() return to --[[@as number]] end
-	local distance = math.abs(get_to() - current)
-	local cutoff = distance * 0.01
-	local target_ticks = (math.max(duration, 1) / (state.render_delay * 1000))
-	local decay = 1 - ((cutoff / distance) ^ (1 / target_ticks))
+	local start_time = mp.get_time()
+	local duration_sec = math.max(duration, 1) / 1000
+	local initial_distance = math.abs(get_to() - from)
 
 	local function finish()
 		if not done then
 			setter(get_to())
 			done = true
-			timeout:kill()
+			if timeout then timeout:kill() end
 			if callback then callback() end
 			request_render()
 		end
 	end
 
 	local function tick()
-		local to = get_to()
-		current = current + ((to - current) * decay)
-		local is_end = math.abs(to - current) <= cutoff
-		if is_end then
+		local target = get_to()
+		local progress = math.min((mp.get_time() - start_time) / duration_sec, 1)
+		if progress >= 1 then
 			finish()
 		else
-			setter(current)
+			-- Smooth cubic ease-out: brisk launch, graceful decelerated settle
+			local eased = 1 - ((1 - progress) ^ 3)
+			setter(from + (target - from) * eased)
 			timeout:resume()
 			request_render()
 		end
 	end
 
 	timeout = mp.add_timeout(state.render_delay, tick)
-	if cutoff > 0 then tick() else finish() end
+	if initial_distance > 0.0001 and duration > 0 then tick() else finish() end
 
 	return finish
 end

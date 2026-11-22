@@ -30,7 +30,7 @@ function TopBar:init()
 		end
 	end
 
-	local close = {icon = 'close', hover_bg = '2311e8', hover_fg = 'ffffff', command = function() mp.command('quit') end}
+	local close = {icon = 'close', hover_bg = '5d45d6', hover_fg = 'ffffff', command = function() mp.command('quit') end}
 	local max = {icon = 'crop_square', command = maximized_command}
 	local min = {icon = 'minimize', command = function() mp.command('cycle window-minimized') end}
 	self.buttons = options.top_bar_controls == 'left' and {close, max, min} or {min, max, close}
@@ -245,8 +245,8 @@ function TopBar:render()
 		for _, button in ipairs(self.buttons) do
 			local rect = {ax = button_ax, ay = ay, bx = button_ax + self.size, by = by}
 			local is_hover = get_point_to_rectangle_proximity(cursor, rect) <= 0
-			local opacity = is_hover and 1 or config.opacity.controls
-			local button_fg = is_hover and (button.hover_fg or bg) or fg
+			local opacity = is_hover and 0.96 or config.opacity.controls
+			local button_fg = is_hover and (button.hover_fg or fgt) or bgt
 			local button_bg = is_hover and (button.hover_bg or fg) or bg
 
 			cursor:zone('primary_down', rect, button.command)
@@ -256,14 +256,17 @@ function TopBar:render()
 			local bg_bx, bg_by = bg_ax + bg_size, bg_ay + bg_size
 
 			ass:rect(bg_ax, bg_ay, bg_bx, bg_by, {
-				color = button_bg, opacity = visibility * opacity, radius = state.radius,
+				color = button_bg,
+				border = 1,
+				border_color = is_hover and button_bg or bgt,
+				opacity = {main = visibility * opacity, border = visibility * (is_hover and 0.25 or 0.14)},
+				radius = state.radius,
 			})
 
 			ass:icon(bg_ax + bg_size / 2, bg_ay + bg_size / 2, bg_size * 0.5, button.icon, {
 				color = button_fg,
-				border_color = button_bg,
+				border = 0,
 				opacity = visibility,
-				border = options.text_border * state.scale,
 			})
 
 			button_ax = button_ax + self.size
@@ -314,7 +317,7 @@ function TopBar:render()
 					wrap = 2,
 					color = bgt,
 					opacity = visibility,
-					border = options.text_border * state.scale,
+					border = config.opacity.title < 0.6 and (options.text_border * state.scale) or 0,
 					border_color = bg,
 					clip = string.format('\\clip(%d, %d, %d, %d)', self.ax, ay, title_bx, by),
 				}
@@ -329,7 +332,11 @@ function TopBar:render()
 				end
 
 				ass:rect(title_rect.ax, title_rect.ay, title_rect.bx, title_rect.by, {
-					color = bg, opacity = visibility * config.opacity.title, radius = state.radius,
+					color = bg,
+					border = 1,
+					border_color = bgt,
+					opacity = {main = visibility * config.opacity.title, border = visibility * 0.14},
+					radius = state.radius,
 				})
 				local align = left_aligned and rect_ideal_width == rect_width and 6 or 4
 				local x = align == 6 and title_rect.bx - padding or ax + padding

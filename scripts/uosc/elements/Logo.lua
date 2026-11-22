@@ -9,17 +9,6 @@ function Logo:new() return Class.new(self) --[[@as Logo]] end
 function Logo:init()
 	Element.init(self, 'logo')
 	self.enabled = state.is_idle
-
-	self.logo_lines = {
-		-- mod https://github.com/mpv-player/mpv/blob/master/player/lua/osc.lua
-		'{\\3c&HF593C8&\\bord2\\blur8\\p5}m 895 10 b 401 10 0 410 0 905 0 1399 401 1800 895 1800 1390 1800 1790 1399 1790 905 1790 410 1390 10 895 10{\\p0}',
-		'{\\1c&HE5E5E5&\\bord0\\blur0\\p5}m 895 10 b 401 10 0 410 0 905 0 1399 401 1800 895 1800 1390 1800 1790 1399 1790 905 1790 410 1390 10 895 10{\\p0}',
-		'{\\1c&H682167&\\bord0\\blur0\\p5}m 925 42 b 463 42 87 418 87 880 87 1343 463 1718 925 1718 1388 1718 1763 1343 1763 880 1763 418 1388 42 925 42{\\p0}',
-		'{\\1c&H430142&\\bord0\\blur0\\p5}m 1605 828 b 1605 1175 1324 1456 977 1456 631 1456 349 1175 349 828 349 482 631 200 977 200 1324 200 1605 482 1605 828{\\p0}',
-		'{\\1c&HDDDBDD&\\bord0\\blur0\\p5}m 1296 910 b 1296 1131 1117 1310 897 1310 676 1310 497 1131 497 910 497 689 676 511 897 511 1117 511 1296 689 1296 910{\\p0}',
-		'{\\1c&H691F69&\\bord0\\blur0\\p5}m 762 1113 l 762 708 b 881 776 1000 843 1119 911 1000 978 881 1046 762 1113{\\p0}',
-	}
-
 end
 
 function Logo:decide_enabled() self.enabled = state.idlescreen and state.is_idle end
@@ -31,30 +20,75 @@ function Logo:render()
 
 	local ass = assdraw.ass_new()
 	local scale = state.scale
-	local scale_percent = scale * 100
+	local cx = display.width / 2
+	local cy = display.height / 2 - 26 * scale
+	local r = round(50 * scale)
 
-	-- logo is rendered at 2^(5-1) = 16 times resolution with size 1800x1800
-	local logo_size = 112.5 * scale
-	local font_size = 40 * scale
-	local spacing = 10 * scale
-	local total_height = logo_size + font_size + spacing
-	local icon_x = (display.width - logo_size) / 2
-	local icon_y = (display.height - total_height) / 2
-	local scaled_icon_x = (display.width - logo_size) / 2
-	local line_prefix = ('{\\rDefault\\an7\\1a&H00&\\bord0\\shad0\\pos(%f,%f)\\fscx%f\\fscy%f}'):format(scaled_icon_x, icon_y, scale_percent, scale_percent)
+	-- Soft layered porcelain elevation shadow
+	ass:circle(cx, cy + round(8 * scale), r + round(4 * scale), {
+		color = bgt,
+		opacity = 0.05,
+	})
+	ass:circle(cx, cy + round(3 * scale), r + round(1 * scale), {
+		color = bgt,
+		opacity = 0.08,
+	})
 
-	-- mpv logo
-	for _, line in ipairs(self.logo_lines) do
-		ass:new_event()
-		ass:append(line_prefix .. line)
+	-- Pure frosted porcelain medallion with delicate cerulean rim
+	ass:circle(cx, cy, r, {
+		color = 'ffffff',
+		border = round(1.5 * scale),
+		border_color = fg,
+		opacity = {main = 0.96, border = 0.28},
+	})
+
+	-- Inner soft mist halo ring
+	ass:circle(cx, cy, round(r * 0.78), {
+		color = bg,
+		opacity = 0.92,
+	})
+
+	-- Minimalist serene cerulean play glyph centered optically
+	ass:icon(cx + round(2 * scale), cy, round(r * 1.05), 'play_arrow', {
+		color = fg,
+		opacity = 0.94,
+	})
+
+	-- Primary calm title
+	local primary_msg = (options.idlemsg == 'default' or options.idlemsg == '')
+		and '拖入番剧开始播放' or tostring(options.idlemsg)
+	local title_size = round(23 * scale)
+	local title_y = cy + r + round(24 * scale)
+	ass:txt(cx, title_y, 8, primary_msg, {
+		size = title_size,
+		color = bgt,
+		bold = true,
+		opacity = 0.88,
+	})
+
+	-- Quiet minimalist shortcut pill bar
+	local sub_text = '右键 / Tab 菜单   ·   Shift+A Anime4K 画质   ·   Z 弹幕开关   ·   Ctrl+B 番剧同步'
+	local sub_size = round(13.5 * scale)
+	local sub_opts = {size = sub_size, color = bgt, opacity = 0.58}
+	local sub_w = text_width(sub_text, sub_opts)
+	local pill_pad_x = round(16 * scale)
+	local pill_pad_y = round(7 * scale)
+	local pill_y = title_y + title_size + round(16 * scale)
+	local pill_h = sub_size + pill_pad_y * 2
+	if sub_w + pill_pad_x * 2 < display.width * 0.92 then
+		ass:rect(
+			cx - sub_w / 2 - pill_pad_x, pill_y,
+			cx + sub_w / 2 + pill_pad_x, pill_y + pill_h,
+			{
+				color = 'ffffff',
+				border = 1,
+				border_color = bgt,
+				opacity = {main = 0.72, border = 0.10},
+				radius = math.floor(pill_h / 2),
+			}
+		)
+		ass:txt(cx, pill_y + pill_h / 2, 5, sub_text, sub_opts)
 	end
-
-	if options.idlemsg == 'default' then
-		state.idlemsg = ''
-	else
-		state.idlemsg = options.idlemsg
-	end
-	ass:txt(display.width / 2, icon_y + logo_size + spacing, 8, tostring(state.idlemsg), {size = font_size})
 
 	return ass
 end

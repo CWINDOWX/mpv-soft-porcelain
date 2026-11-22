@@ -63,18 +63,29 @@ function PauseIndicator:render()
 		ass:rect(0, 0, display.width, display.height, {color = bg, opacity = self.opacity * 0.3})
 	end
 
-	-- Icon
-	local size = round(math.min(display.width, display.height) * (self.fadeout and 0.20 or 0.15))
-	size = size + size * (1 - self.opacity)
+	-- Frosted porcelain disc behind pause/play icon for crisp legibility over any frame
+	local base_size = round(math.min(display.width, display.height) * (self.fadeout and 0.12 or 0.095))
+	local size = base_size + round(base_size * 0.35 * (1 - self.opacity))
+	local radius = round(size * 0.72)
+	local cx, cy = display.width / 2, display.height / 2
+
+	ass:circle(cx, cy, radius, {
+		color = bg,
+		border = 1.5,
+		border_color = bgt,
+		opacity = {main = 0.88 * self.opacity, border = 0.14 * self.opacity},
+	})
 
 	if self.paused then
-		ass:icon(display.width / 2, display.height / 2, size, 'pause',
-			{border = 1, opacity = self.base_icon_opacity * self.opacity}
-		)
+		ass:icon(cx, cy, size, 'pause', {
+			color = fg,
+			opacity = self.base_icon_opacity * self.opacity,
+		})
 	else
-		ass:icon(display.width / 2, display.height / 2, size * 1.2, 'play_arrow',
-			{border = 1, opacity = self.base_icon_opacity * self.opacity}
-		)
+		ass:icon(cx + round(size * 0.04), cy, size * 1.12, 'play_arrow', {
+			color = fg,
+			opacity = self.base_icon_opacity * self.opacity,
+		})
 	end
 
 	return ass

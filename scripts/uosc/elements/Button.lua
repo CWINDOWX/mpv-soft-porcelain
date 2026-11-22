@@ -41,18 +41,26 @@ function Button:render()
 	local ass = assdraw.ass_new()
 	local is_clickable = self.is_clickable and self.on_click ~= nil
 	local is_hover = self.proximity_raw <= 0
-	local foreground = self.active and self.background or self.foreground
-	local background = self.active and self.foreground or self.background
-	local background_opacity = self.active and 1 or config.opacity.controls
+	local is_lit = self.active or (is_hover and is_clickable)
 
-	if is_hover and is_clickable and background_opacity < 0.3 then background_opacity = 0.3 end
+	-- Soft Porcelain pill styling:
+	-- Resting: frosted porcelain fill (bg) + subtle slate hairline + crisp slate ink icon (bgt)
+	-- Hover / Active: serene cerulean fill (fg) + crisp white icon (fgt)
+	local pill_color = is_lit and self.foreground or self.background
+	local icon_color = is_lit and fgt or bgt
+	local pill_opacity = self.active and (is_hover and 1 or 0.94)
+		or (is_hover and is_clickable and 0.94 or config.opacity.controls)
+	local border_color = is_lit and (is_hover and fgt or self.foreground) or bgt
+	local border_opacity = is_lit and (is_hover and 0.35 or 0.22) or 0.14
 
-	-- Background
-	if background_opacity > 0 then
+	-- Background pill
+	if pill_opacity > 0 then
 		ass:rect(self.ax, self.ay, self.bx, self.by, {
-			color = (self.active or not is_hover) and background or foreground,
+			color = pill_color,
 			radius = state.radius,
-			opacity = visibility * background_opacity,
+			border = 1,
+			border_color = border_color,
+			opacity = {main = visibility * pill_opacity, border = visibility * border_opacity},
 		})
 	end
 
@@ -61,35 +69,44 @@ function Button:render()
 
 	-- Badge
 	local icon_clip
+	local icon_offset_y = 0
 	if self.badge then
-		local badge_font_size = self.font_size * 0.6
-		local badge_opts = {size = badge_font_size, color = background, opacity = visibility}
+		local badge_bg = is_lit and self.background or self.foreground
+		local badge_fg = is_lit and self.foreground or fgt
+		local badge_font_size = math.max(8, round(self.font_size * 0.42))
+		local badge_opts = {size = badge_font_size, color = badge_fg, bold = true, opacity = visibility}
 		local badge_width = text_width(self.badge, badge_opts)
-		local width, height = math.ceil(badge_width + (badge_font_size / 7) * 2), math.ceil(badge_font_size * 0.93)
-		local bx, by = self.bx - 1, self.by - 1
+		local pad_x = math.max(3, math.ceil(badge_font_size * 0.35))
+		local width = math.ceil(badge_width + pad_x * 2)
+		local height = math.ceil(badge_font_size * 1.25)
+		local bx, by = self.bx + 2, self.by + 2
+		local badge_radius = math.min(state.radius, math.floor(height / 2))
 		ass:rect(bx - width, by - height, bx, by, {
-			color = foreground,
-			radius = state.radius,
+			color = badge_bg,
+			radius = badge_radius,
 			opacity = visibility,
-			border = self.active and 0 or 1,
-			border_color = background,
+			border = 1,
+			border_color = is_lit and self.foreground or self.background,
 		})
 		ass:txt(bx - width / 2, by - height / 2, 5, self.badge, badge_opts)
 
-		local clip_border = math.max(self.font_size / 20, 1)
+		local clip_border = math.max(self.font_size / 22, 1)
 		local clip_path = assdraw.ass_new()
 		clip_path:round_rect_cw(
-			math.floor((bx - width) - clip_border), math.floor((by - height) - clip_border), bx, by, 3
+			math.floor((bx - width) - clip_border), math.floor((by - height) - clip_border), bx + 1, by + 1, badge_radius
 		)
 		icon_clip = '\\iclip(' .. clip_path.scale .. ', ' .. clip_path.text .. ')'
+		icon_offset_y = -round(height * 0.22)
 	end
 
 	-- Icon
-	local x, y = round(self.ax + (self.bx - self.ax) / 2), round(self.ay + (self.by - self.ay) / 2)
-	ass:icon(x, y, self.font_size, self.icon, {
-		color = foreground,
-		border = self.active and 0 or options.text_border * state.scale,
-		border_color = background,
+	local x, y = round(self.ax + (self.bx - self.ax) / 2), round(self.ay + (self.by - self.ay) / 2) + icon_offset_y
+	local needs_border = pill_opacity < 0.4
+	local icon_scale = self.badge and 0.80 or 0.92
+	ass:icon(x, y, self.font_size * icon_scale, self.icon, {
+		color = icon_color,
+		border = needs_border and (options.text_border * state.scale) or 0,
+		border_color = pill_color,
 		opacity = visibility,
 		clip = icon_clip,
 	})

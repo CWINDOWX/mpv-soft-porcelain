@@ -89,15 +89,15 @@ end
 function ass_mt:tooltip(element, value, opts)
 	if value == '' then return end
 	opts = opts or {}
-	opts.size = opts.size or round(16 * state.scale)
-	opts.border = options.text_border * state.scale
+	opts.size = opts.size or round(15 * state.scale)
+	opts.border = config.opacity.tooltip < 0.5 and (options.text_border * state.scale) or 0
 	opts.border_color = opts.invert_colors and fg or bg
 	opts.margin = opts.margin or round(10 * state.scale)
 	opts.lines = opts.lines or 1
-	opts.color = opts.invert_colors and bg or fg
-	local offset = opts.offset or 2
-	local padding_y = round(opts.size / 6)
-	local padding_x = round(opts.size / 3)
+	opts.color = opts.invert_colors and fgt or bgt
+	local offset = opts.offset or 6
+	local padding_y = round(opts.size * 0.28)
+	local padding_x = round(opts.size * 0.52)
 	local width = (opts.width_overwrite or text_width(value, opts)) + padding_x * 2
 	local height = opts.size * opts.lines + 2 * padding_y
 	local width_half, height_half = width / 2, height / 2
@@ -131,7 +131,11 @@ function ass_mt:tooltip(element, value, opts)
 	-- Draw
 	local ax, ay, bx, by = round(x - width_half), round(y - height_half), round(x + width_half), round(y + height_half)
 	self:rect(ax, ay, bx, by, {
-		color = opts.invert_colors and fg or bg, opacity = config.opacity.tooltip, radius = state.radius
+		color = opts.invert_colors and fg or bg,
+		border = 1,
+		border_color = opts.invert_colors and fg or bgt,
+		opacity = {main = config.opacity.tooltip, border = 0.14 * config.opacity.tooltip},
+		radius = state.radius,
 	})
 	local func = opts.timestamp and self.timestamp or self.txt
 	func(self, x, y, 5, tostring(value), opts)

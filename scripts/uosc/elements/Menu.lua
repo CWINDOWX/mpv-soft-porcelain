@@ -1403,25 +1403,44 @@ function Menu:render()
 		}
 		local blur_action_index = self.mouse_nav and menu.action_index ~= nil
 
-		-- Background
+		-- Soft elevation shadow + porcelain card surface with hairline border
+		local card_radius = state.radius > 0 and math.min(state.radius + self.padding, state.radius * 2) or 0
+		if is_current then
+			ass:rect(bg_rect.ax - 2, bg_rect.ay + 6, bg_rect.bx + 2, bg_rect.by + 10, {
+				color = bgt,
+				opacity = menu_opacity * 0.06,
+				radius = card_radius + 2,
+			})
+			ass:rect(bg_rect.ax, bg_rect.ay + 2, bg_rect.bx, bg_rect.by + 4, {
+				color = bgt,
+				opacity = menu_opacity * 0.08,
+				radius = card_radius,
+			})
+		end
 		ass:rect(bg_rect.ax, bg_rect.ay, bg_rect.bx, bg_rect.by, {
 			color = bg,
-			opacity = menu_opacity * config.opacity.menu,
-			radius = state.radius > 0 and math.min(state.radius + self.padding, state.radius * 3) or 0,
+			border = 1,
+			border_color = bgt,
+			opacity = {main = menu_opacity * config.opacity.menu, border = menu_opacity * 0.14},
+			radius = card_radius,
 		})
 
 		if is_parent then
 			cursor:zone('primary_down', bg_rect, self:create_action(function() self:slide_in_menu(menu.id, x) end))
 		end
 
-		-- Scrollbar
+		-- Scrollbar (rounded pill)
 		if menu.scroll_height > 0 then
 			local groove_height = menu.height - 2
 			local thumb_height = math.max((menu.height / (menu.scroll_height + menu.height)) * groove_height, 40)
 			local thumb_y = content_rect.ay + 1 + ((menu.scroll_y / menu.scroll_height) * (groove_height - thumb_height))
 			local sax = content_rect.bx - round(self.scrollbar_size / 2)
 			local sbx = sax + self.scrollbar_size
-			ass:rect(sax, thumb_y, sbx, thumb_y + thumb_height, {color = fg, opacity = menu_opacity * 0.8})
+			ass:rect(sax, thumb_y, sbx, thumb_y + thumb_height, {
+				color = fg,
+				opacity = menu_opacity * 0.65,
+				radius = math.ceil(self.scrollbar_size / 2),
+			})
 		end
 
 		-- Draw submenu if selected
@@ -1487,12 +1506,12 @@ function Menu:render()
 				end
 				ass:rect(
 					content_rect.ax + self.item_padding, ay, content_rect.bx - self.item_padding, by,
-					{color = fg, opacity = menu_opacity * (item.separator and 0.13 or 0.04)}
+					{color = bgt, opacity = menu_opacity * (item.separator and 0.16 or 0.06)}
 				)
 			end
 
 			-- Background
-			local highlight_opacity = 0 + (item.active and 0.8 or 0) + (is_selected and 0.15 or 0)
+			local highlight_opacity = 0 + (item.active and 0.92 or 0) + (is_selected and (item.active and 0.08 or 0.14) or 0)
 			if highlight_opacity > 0 then
 				ass:rect(content_rect.ax, item_ay, content_rect.bx, item_by, {
 					radius = state.radius,
@@ -1541,13 +1560,13 @@ function Menu:render()
 						ass:rect(rect.ax, rect.ay, rect.bx, rect.by, {
 							radius = state.radius > 2 and state.radius - 1 or state.radius,
 							color = is_active and fg or bg,
-							border = is_active and self.gap or nil,
-							border_color = bg,
-							opacity = menu_opacity,
+							border = 1,
+							border_color = is_active and fg or bgt,
+							opacity = {main = menu_opacity, border = menu_opacity * (is_active and 0.3 or 0.16)},
 							clip = item_clip,
 						})
 						ass:icon(rect.ax + size / 2, rect.ay + size / 2, size * 0.66, action.icon, {
-							color = is_active and bg or fg, opacity = menu_opacity, clip = item_clip,
+							color = is_active and fgt or bgt, opacity = menu_opacity, clip = item_clip,
 						})
 
 						-- Re-use rect as a hitbox by growing it so it bridges gaps to prevent flickering
@@ -1624,7 +1643,7 @@ function Menu:render()
 					size = self.font_size_hint,
 					color = font_color,
 					wrap = 2,
-					opacity = 0.5 * menu_opacity,
+					opacity = (item.active and 0.85 or 0.62) * menu_opacity,
 					clip = clip,
 				})
 			end

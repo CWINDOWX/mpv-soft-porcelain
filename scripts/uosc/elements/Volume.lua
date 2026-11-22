@@ -256,32 +256,42 @@ function Volume:render()
 		mp.set_property_native('volume', 100)
 	end)
 
-	-- Mute button
-	local mute_rect = {ax = self.ax, ay = self.mute_ay, bx = self.bx, by = self.by}
+	-- Mute button (frosted porcelain pill matching control bar)
+	local mute_rect = {ax = self.ax, ay = self.mute_ay + round(4 * state.scale), bx = self.bx, by = self.by}
 	cursor:zone('primary_down', mute_rect, function() mp.commandv('cycle', 'mute') end)
+	local is_hover = get_point_to_rectangle_proximity(cursor, mute_rect) <= 0
+	local is_lit = state.mute or is_hover
 	local ass = assdraw.ass_new()
 	local width_half = (mute_rect.bx - mute_rect.ax) / 2
 	local height_half = (mute_rect.by - mute_rect.ay) / 2
-	local icon_size = math.min(width_half, height_half) * 1.5
+	local icon_size = math.min(width_half, height_half) * 1.35
 	local icon_name, horizontal_shift = 'volume_up', 0
 	if state.mute then
 		icon_name = 'volume_off'
 	elseif state.volume < 50 then
-		icon_name, horizontal_shift = 'volume_mute', height_half * 0.25
+		icon_name, horizontal_shift = 'volume_mute', height_half * 0.2
 	elseif state.volume < 80 then
-		icon_name, horizontal_shift = 'volume_down', height_half * 0.125
+		icon_name, horizontal_shift = 'volume_down', height_half * 0.1
 	elseif state.volume > 100 and state.volume <= 125 then
 		icon_name, horizontal_shift = 'noise_aware', 0
 	elseif state.volume > 125 then
 		icon_name, horizontal_shift = 'noise_control_off', 0
 	end
-	local underlay_opacity = {main = visibility * 0.2, border = visibility * 0.5}
-	ass:icon(mute_rect.ax + width_half, mute_rect.ay + height_half, icon_size, 'volume_up',
-		{border = options.text_border * state.scale, opacity = underlay_opacity, align = 5}
-	)
-	ass:icon(mute_rect.ax + width_half - horizontal_shift, mute_rect.ay + height_half, icon_size, icon_name,
-		{opacity = visibility, align = 5}
-	)
+	ass:rect(mute_rect.ax, mute_rect.ay, mute_rect.bx, mute_rect.by, {
+		color = is_lit and fg or bg,
+		border = 1,
+		border_color = is_lit and fg or bgt,
+		opacity = {
+			main = visibility * (is_lit and 0.94 or config.opacity.slider),
+			border = visibility * (is_lit and 0.25 or 0.14),
+		},
+		radius = state.radius,
+	})
+	ass:icon(mute_rect.ax + width_half - horizontal_shift, mute_rect.ay + height_half, icon_size, icon_name, {
+		color = is_lit and fgt or bgt,
+		opacity = visibility,
+		align = 5,
+	})
 	return ass
 end
 

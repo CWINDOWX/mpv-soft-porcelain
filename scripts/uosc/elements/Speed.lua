@@ -121,7 +121,11 @@ function Speed:render()
 
 	-- Background
 	ass:rect(self.ax, self.ay, self.bx, self.by, {
-		color = bg, radius = state.radius, opacity = opacity * config.opacity.speed,
+		color = bg,
+		border = 1,
+		border_color = bgt,
+		radius = state.radius,
+		opacity = {main = opacity * config.opacity.speed, border = opacity * 0.14},
 	})
 
 	-- Coordinates
@@ -184,8 +188,7 @@ function Speed:render()
 	ass:txt(half_x, ay + (notch_ay_big - ay) / 2, 5, speed_text, {
 		size = self.font_size,
 		color = bgt,
-		border = options.text_border * state.scale,
-		border_color = bg,
+		border = 0,
 		opacity = opacity,
 	})
 

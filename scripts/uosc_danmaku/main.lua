@@ -16,6 +16,7 @@ require("modules/parse")
 require("modules/guess")
 require('modules/render')
 require('modules/menu')
+require('modules/style_panel')
 require("modules/update")
 
 require("apis/dandanplay")

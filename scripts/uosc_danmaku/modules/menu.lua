@@ -967,7 +967,9 @@ function open_style_menu_uosc(actived, status)
 end
 
 function open_style_menu(actived, status)
-    if uosc_available then
+    if type(open_danmaku_style_panel) == "function" then
+        open_danmaku_style_panel()
+    elseif uosc_available then
         open_style_menu_uosc(actived, status)
     elseif input_loaded then
         mp.add_timeout(0.01, function()

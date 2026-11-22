@@ -41,6 +41,7 @@ local state = {
     synced = false,
     prompted = false,
     busy = false,
+    playback_seq = 0,
     search_seq = 0
 }
 
@@ -198,9 +199,13 @@ local function mark_current_watched()
     end
 
     state.busy = true
+    local playback_seq = state.playback_seq
+    local subject_id, episode = state.subject_id, state.episode
     mp.osd_message("正在同步到 Bangumi…", 2)
-    run_cli({ "mark", state.subject_id, state.episode }, function(res)
+    run_cli({ "mark", subject_id, episode }, function(res)
+        if playback_seq ~= state.playback_seq then return end
         state.busy = false
+        if state.subject_id ~= subject_id or state.episode ~= episode then return end
         if res.ok then
             state.synced = true
             state.prompted = true
@@ -492,6 +497,8 @@ end)
 
 -- React to file load and uosc_danmaku automatic anime match
 mp.register_event("file-loaded", function()
+    state.playback_seq = state.playback_seq + 1
+    state.busy = false
     state.current_path = mp.get_property("path")
     state.subject_id = nil
     state.subject_name = nil

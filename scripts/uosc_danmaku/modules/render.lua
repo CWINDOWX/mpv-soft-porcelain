@@ -1,6 +1,5 @@
 -- modified from https://github.com/rkscv/danmaku/blob/main/danmaku.lua
 local msg = require('mp.msg')
-local utils = require("mp.utils")
 local unpack = unpack or table.unpack
 
 local osd_width, osd_height, pause = 0, 0, true
@@ -348,19 +347,14 @@ mp.add_hook("on_unload", 50, function()
         mp.commandv("vf", "remove", "@danmaku")
     end
 
-    local files_to_remove = {
-        file1 = utils.join_path(DANMAKU_PATH, "temp-" .. PID .. ".mp4"),
-    }
-
     if options.save_danmaku then
         save_danmaku(true)
     end
 
-    for _, file in pairs(files_to_remove) do
-        if file_exists(file) then
-            os.remove(file)
-        end
+    for file in pairs(DANMAKU.hash_samples or {}) do
+        os.remove(file)
     end
 
     DANMAKU = {sources = {}, count = 1}
+    async_running = false
 end)

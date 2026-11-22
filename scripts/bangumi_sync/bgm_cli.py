@@ -293,10 +293,11 @@ def cmd_mark(cfg_dir, subject_id, ep_num):
     sid = int(subject_id)
     target_ep = float(ep_num)
 
-    # Fetch episodes (type=0 main episodes first)
-    all_eps = []
+    # An exact ep on any page takes precedence over a sort match.
+    found = None
+    sort_match = None
     offset = 0
-    while offset < 1000:
+    while True:
         status, obj = api_request(
             "GET",
             "/v0/episodes",
@@ -308,23 +309,20 @@ def cmd_mark(cfg_dir, subject_id, ep_num):
             out_json({"ok": False, "error": f"获取剧集列表失败：{msg}"})
             return
         batch = obj.get("data") or []
-        all_eps.extend(batch)
-        total = int(obj.get("total") or 0)
-        if not batch or len(all_eps) >= total:
-            break
-        offset += len(batch)
-
-    found = None
-    for ep in all_eps:
-        if ep.get("ep") is not None and abs(float(ep["ep"]) - target_ep) < 1e-6:
-            found = ep
-            break
-    if not found:
-        for ep in all_eps:
-            if ep.get("sort") is not None and abs(float(ep["sort"]) - target_ep) < 1e-6:
+        for ep in batch:
+            if ep.get("ep") is not None and abs(float(ep["ep"]) - target_ep) < 1e-6:
                 found = ep
                 break
+            if sort_match is None and ep.get("sort") is not None and abs(float(ep["sort"]) - target_ep) < 1e-6:
+                sort_match = ep
 
+        offset += len(batch)
+        total = obj.get("total")
+        if found or not batch or (total is not None and offset >= int(total)):
+            break
+
+    if found is None:
+        found = sort_match
     if not found:
         out_json({"ok": False, "error": f"未在 Bangumi 条目 #{sid} 中找到第 {ep_num} 集"})
         return

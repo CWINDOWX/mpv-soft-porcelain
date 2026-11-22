@@ -1,5 +1,7 @@
 local msg = require('mp.msg')
 local utils = require("mp.utils")
+local hash_sample_size = 16 * 1024 * 1024
+local sample_sequence = 0
 
 local function extract_url(url)
     local path = url:match("^https?://[^/]+(/[^%?]*)")
@@ -280,27 +282,32 @@ local function match_anime()
 end
 
 -- 执行哈希匹配获取弹幕
-local function match_file(file_path, file_name, callback)
-    -- 计算文件哈希
-    local hash = nil
+local function hash_file_prefix(file_path)
     local file_info = utils.file_info(file_path)
-    if file_info and file_info.size > 16 * 1024 * 1024 then
-        local file, error = io.open(normalize(file_path), 'rb')
-        if file and not error then
-            local m = MD5.new()
-            for _ = 1, 16 * 1024 do
-                local content = file:read(1024)
-                if not content then
-                    break
-                end
-                m:update(content)
-            end
+    if not file_info or file_info.size < hash_sample_size then return end
+    local file = io.open(normalize(file_path), 'rb')
+    if not file then return end
+    local digest = MD5.new()
+    local chunk_size = 64 * 1024
+    for _ = 1, hash_sample_size / chunk_size do
+        local chunk = file:read(chunk_size)
+        if not chunk or #chunk ~= chunk_size then
             file:close()
-            hash = m:finish()
+            return
         end
+        digest:update(chunk)
     end
+    file:close()
+    return digest:finish()
+end
 
-    if hash then msg.info('hash:', hash) end
+local function match_file(file_path, file_name, callback)
+    local hash = hash_file_prefix(file_path)
+    if not hash then
+        callback("无法读取完整的哈希样本")
+        return
+    end
+    msg.info('hash:', hash)
 
     local title, season_num, episode_num = parse_title()
     if title and episode_num then
@@ -318,14 +325,16 @@ local function match_file(file_path, file_name, callback)
             ["Content-Type"] = "application/json"
         }, {
             fileName = file_name,
-            fileHash = hash or "a1b2c3d4e5f67890abcd1234ef567890",
+            fileHash = hash,
             matchMode = "hashAndFileName"
         }
     )
 
     if not args then return end
 
+    local playback = DANMAKU
     call_cmd_async(args, function(error, json)
+        if playback ~= DANMAKU then return end
         async_running = false
         if error then
             show_message("HTTP 请求失败，打开控制台查看详情", 5)
@@ -348,7 +357,9 @@ end
 
 -- 异步获取弹幕数据
 function fetch_danmaku_data(args, callback)
+    local playback = DANMAKU
     call_cmd_async(args, function(error, json)
+        if playback ~= DANMAKU then return end
         async_running = false
         if error then
             show_message("获取数据失败", 3)
@@ -390,26 +401,20 @@ function handle_danmaku_data(query, data, from_menu)
     if not data or not data["comments"] or data["count"] <= 1 then
         show_message("服务器无缓存数据，再次尝试请求", 10)
         msg.verbose("服务器无缓存数据，再次尝试请求")
-        -- 等待 2 秒后重试
-        local start = os.time()
-        while os.time() - start < 2 do
-            -- 空循环，等待 2 秒
-        end
-        -- 重新发起请求
-        local url = options.api_server .. "/api/v2/extcomment?url=" .. url_encode(query)
-        local args = make_danmaku_request_args("GET", url)
-
-        if args == nil then
-            return
-        end
-
-        fetch_danmaku_data(args, function(retry_data)
-            if not retry_data or not retry_data["comments"] or retry_data["count"] <= 1 then
-                get_danmaku_fallback(query)
-                return
-            end
-            save_danmaku_data(retry_data["comments"], query, "user_custom")
-            load_danmaku(from_menu)
+        local playback = DANMAKU
+        mp.add_timeout(2, function()
+            if playback ~= DANMAKU then return end
+            local url = options.api_server .. "/api/v2/extcomment?url=" .. url_encode(query)
+            local args = make_danmaku_request_args("GET", url)
+            if not args then return end
+            fetch_danmaku_data(args, function(retry_data)
+                if not retry_data or not retry_data["comments"] or retry_data["count"] <= 1 then
+                    get_danmaku_fallback(query)
+                    return
+                end
+                save_danmaku_data(retry_data["comments"], query, "user_custom")
+                load_danmaku(from_menu)
+            end)
         end)
     else
         save_danmaku_data(data["comments"], query, "user_custom")
@@ -566,21 +571,32 @@ function get_danmaku_with_hash(file_name, file_path)
         match_anime()
         return
     end
+    local function fallback(reason)
+        msg.info(reason .. "，尝试通过解析文件名获取弹幕")
+        match_anime()
+    end
     if is_protocol(file_path) then
         set_danmaku_button()
-        local temp_file = "temp-" .. PID .. ".mp4"
+        local playback = DANMAKU
+        sample_sequence = sample_sequence + 1
+        local temp_file = utils.join_path(DANMAKU_PATH, ("temp-%s-%d.mp4"):format(PID, sample_sequence))
+        playback.hash_samples = playback.hash_samples or {}
+        playback.hash_samples[temp_file] = true
         local arg = {
             "curl",
+            "--fail",
             "--connect-timeout",
             "10",
             "--max-time",
             "30",
             "--range",
-            "0-16777215",
+            "0-" .. (hash_sample_size - 1),
+            "--max-filesize",
+            tostring(hash_sample_size),
             "--user-agent",
             options.user_agent,
             "--output",
-            utils.join_path(DANMAKU_PATH, temp_file),
+            temp_file,
             "-L",
             file_path,
         }
@@ -591,17 +607,16 @@ function get_danmaku_with_hash(file_name, file_path)
         end
 
         call_cmd_async(arg, function(error)
-            async_running = false
-
-            file_path = utils.join_path(DANMAKU_PATH, temp_file)
-
-            match_file(file_path, file_name, function(error)
+            if playback == DANMAKU then
+                async_running = false
                 if error then
-                    msg.error(error)
-                    msg.info("尝试通过解析文件名获取弹幕")
-                    match_anime()
+                    fallback(error)
+                else
+                    match_file(temp_file, file_name, fallback)
                 end
-            end)
+            end
+            os.remove(temp_file)
+            playback.hash_samples[temp_file] = nil
         end)
     else
         local dir = get_parent_directory(file_path)
@@ -615,12 +630,6 @@ function get_danmaku_with_hash(file_name, file_path)
             match_anime()
             return
         end
-        match_file(file_path, file_name, function(error)
-            if error then
-                msg.error(error)
-                msg.info("尝试通过解析文件名获取弹幕")
-                match_anime()
-            end
-        end)
+        match_file(file_path, file_name, fallback)
     end
 end

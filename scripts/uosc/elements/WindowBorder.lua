@@ -12,23 +12,30 @@ function WindowBorder:init()
 	self:decide_enabled()
 end
 
+-- Last applied margins; one state change (resize/fullscreen/maximize) fires several observers,
+-- so skip redundant property writes that would otherwise re-trigger video layout each time.
+local applied_margins = {}
+
+local function set_margin(side, value)
+	value = round(value * 10000) / 10000
+	if applied_margins[side] == value then return end
+	applied_margins[side] = value
+	mp.set_property_number('video-margin-ratio-' .. side, value)
+end
+
 function WindowBorder:sync_video_margins()
 	if not display.width or display.width <= 100 or not display.height or display.height <= 100 then return end
 	if self.enabled and not state.fullscreen then
 		local vp = self.viewport
-		local top_r = clamp(0, vp.ay / display.height, 0.35)
-		local left_r = clamp(0, vp.ax / display.width, 0.25)
-		local right_r = clamp(0, (display.width - vp.bx) / display.width, 0.25)
-		local bottom_r = clamp(0, (display.height - vp.by) / display.height, 0.25)
-		mp.set_property_number('video-margin-ratio-top', top_r)
-		mp.set_property_number('video-margin-ratio-left', left_r)
-		mp.set_property_number('video-margin-ratio-right', right_r)
-		mp.set_property_number('video-margin-ratio-bottom', bottom_r)
+		set_margin('top', clamp(0, vp.ay / display.height, 0.35))
+		set_margin('left', clamp(0, vp.ax / display.width, 0.25))
+		set_margin('right', clamp(0, (display.width - vp.bx) / display.width, 0.25))
+		set_margin('bottom', clamp(0, (display.height - vp.by) / display.height, 0.25))
 	else
-		mp.set_property_number('video-margin-ratio-top', 0)
-		mp.set_property_number('video-margin-ratio-left', 0)
-		mp.set_property_number('video-margin-ratio-right', 0)
-		mp.set_property_number('video-margin-ratio-bottom', 0)
+		set_margin('top', 0)
+		set_margin('left', 0)
+		set_margin('right', 0)
+		set_margin('bottom', 0)
 	end
 end
 

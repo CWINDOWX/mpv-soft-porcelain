@@ -804,6 +804,7 @@ function open_danmaku_style_panel()
     end
     if uosc_available then
         mp.commandv("script-message-to", "uosc", "close-menu")
+        mp.commandv("script-message-to", "speed_menu", "close")
         mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "volume,controls,timeline,speed")
     end
     P.open = true

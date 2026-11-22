@@ -1189,6 +1189,25 @@ end)
 mp.register_script_message('flash-elements', function(elements) Elements:flash(comma_split(elements)) end)
 mp.register_script_message('overwrite-binding', function(name, command) key_binding_overwrites[name] = command end)
 mp.register_script_message('disable-elements', function(id, elements) Manager:disable(id, elements) end)
+mp.register_script_message('external-popup', function(active, keep_controls)
+	state.external_popup = (active == 'true' or active == '1' or active == 'yes')
+	state.keep_controls_visible = (keep_controls == 'true' or keep_controls == '1' or keep_controls == 'yes')
+	request_render()
+end)
+mp.register_script_message('click-controls', function(exclude_name, sx, sy)
+	if not Elements.controls or not Elements.controls.enabled then return end
+	local mx, my = tonumber(sx) or cursor.x, tonumber(sy) or cursor.y
+	for _, control in ipairs(Elements.controls.layout) do
+		local el = control.element
+		if el and el.enabled and el.handle_cursor_click
+			and mx >= el.ax and mx <= el.bx and my >= el.ay and my <= el.by then
+			if not exclude_name or el.name ~= exclude_name then
+				el:handle_cursor_click()
+			end
+			return
+		end
+	end
+end)
 if options.idlescreen then
 	mp.register_script_message('osc-idlescreen', function(mode, no_osd)
 		if mode == 'cycle' then mode = state.idlescreen and 'no' or 'yes' end

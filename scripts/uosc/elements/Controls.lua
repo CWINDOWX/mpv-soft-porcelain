@@ -311,7 +311,7 @@ function Controls:register_badge_updater(badge, element)
 end
 
 function Controls:get_visibility()
-	if Elements.menu and Elements.menu.keep_controls_visible then return 1 end
+	if (Elements.menu and Elements.menu.keep_controls_visible) or state.keep_controls_visible then return 1 end
 	return Elements:v('speed', 'dragging') and 1 or Elements:maybe('timeline', 'get_is_hovered')
 		and -1 or Element.get_visibility(self)
 end
@@ -333,7 +333,10 @@ function Controls:update_dimensions()
 		if control.element then control.element.enabled = self.enabled end
 	end
 
-	if not self.enabled then return end
+	if not self.enabled then
+		mp.set_property_native('user-data/uosc/controls/dock', nil)
+		return
+	end
 
 	-- Container
 	self.bx = display.width - window_border - margin
@@ -420,6 +423,25 @@ function Controls:update_dimensions()
 			current_x = element and bx + spacing or bx
 		end
 	end
+
+	local pad_x = round(8 * state.scale)
+	local pad_y = round(6 * state.scale)
+	local dock_buttons = {}
+	for _, control in ipairs(self.layout) do
+		local el = control.element
+		if not control.hide and el and el.name then
+			dock_buttons[el.name] = {ax = el.ax, ay = el.ay, bx = el.bx, by = el.by}
+		end
+	end
+	mp.set_property_native('user-data/uosc/controls/dock', {
+		ax = math.max(window_border + round(4 * state.scale), self.ax - pad_x),
+		ay = self.ay - pad_y,
+		bx = math.min(display.width - window_border - round(4 * state.scale), self.bx + pad_x),
+		by = self.by + pad_y,
+		scale = state.scale,
+		wb = window_border,
+		buttons = dock_buttons,
+	})
 
 	Elements:update_proximities()
 	request_render()

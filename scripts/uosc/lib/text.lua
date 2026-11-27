@@ -300,11 +300,9 @@ local function no_remeasure_required(px)
 	return px >= 800 or (px * 1.1 >= osd_width and px * 1.1 >= osd_height)
 end
 
+local char_width_cache = {}
 local character_width
 do
-	---@type {[boolean]: {[string]: {[1]: number, [2]: integer}}}
-	local char_width_cache = {}
-
 	---Get measured width of character
 	---@param char string
 	---@param bold boolean
@@ -411,10 +409,14 @@ local function normalized_to_real(width, opts)
 	return factor * width + offset
 end
 
-do
-	---@type {[boolean]: {[boolean]: {[string|number]: {[1]: number, [2]: integer}}}} | {[boolean]: {[string|number]: {[1]: number, [2]: integer}}}
-	local width_cache = {}
+local width_cache = {}
 
+function clear_text_width_cache()
+	char_width_cache = {}
+	width_cache = {}
+end
+
+do
 	---Calculate width of text with the given opts
 	---@param text string|number
 	---@return number

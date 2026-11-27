@@ -41,7 +41,7 @@ local PRESETS = {
     {
         id = "comfort", label = "清爽",
         values = {
-            fontname = "LXGW WenKai Mono Lite", fontsize = 36, opacity = 0.78,
+            fontname = "Microsoft YaHei UI", fontsize = 36, opacity = 0.78,
             displayarea = 0.72, scrolltime = 13, fixtime = 5, bold = true,
             outline = 1.0, shadow = 0.5, max_screen_danmaku = 0, merge_tolerance = 5,
             block_top = false, block_bottom = false, block_scroll = false, block_color = false,
@@ -81,10 +81,10 @@ local PRESETS = {
 }
 
 local FONTS = {
-    { id = "LXGW WenKai Mono Lite", label = "霞鹜文楷" },
-    { id = "Microsoft YaHei UI",    label = "微软雅黑" },
-    { id = "SimHei",                label = "黑体" },
-    { id = "YouYuan",               label = "幼圆" },
+    { id = "Microsoft YaHei UI", label = "默认" },
+    { id = "SimHei",             label = "黑体" },
+    { id = "KaiTi",              label = "楷体" },
+    { id = "__more__",           label = "更多字体" },
 }
 
 -- Slider definitions with curated magnetic snap points (贴合点)
@@ -309,8 +309,9 @@ end
 
 local function draw_txt(ass, x, y, align, text, size, color, opacity, bold, font)
     ass:new_event()
+    local ui_font = font or mp.get_property("osd-font") or "Microsoft YaHei UI"
     local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fn%s\\fs%d\\1c&H%s&\\alpha&H%s&%s",
-        x, y, align, font or "LXGW WenKai Mono Lite", size, color, alpha_hex(opacity), bold and "\\b1" or "")
+        x, y, align, ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
     ass:append("{" .. tags .. "}" .. text)
 end
 
@@ -544,11 +545,20 @@ local function render_panel()
     -- === Section 3: Font Family Chips ===
     local f_gap = math.floor(6 * scale)
     local f_w = (cw - f_gap * (#FONTS - 1)) / #FONTS
+    local cur_font = tostring(options.fontname or "Microsoft YaHei UI")
+    local is_quick_font = false
+    for _, fn in ipairs(FONTS) do
+        if fn.id ~= "__more__" and cur_font == fn.id then
+            is_quick_font = true
+            break
+        end
+    end
     for idx, fn in ipairs(FONTS) do
         local fx1 = math.floor(cx1 + (idx - 1) * (f_w + f_gap) + 0.5)
         local frect = { ax = fx1, ay = y, bx = math.floor(fx1 + f_w + 0.5), by = y + font_row_h }
         local fid = "font_" .. idx
-        local active = (tostring(options.fontname) == fn.id)
+        local is_more = (fn.id == "__more__")
+        local active = is_more and (not is_quick_font) or (cur_font == fn.id)
         local hov = (P.hover_id == fid)
         draw_rrect(ass, frect.ax, frect.ay, frect.bx, frect.by, math.floor(8 * scale),
             active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.96, 0)
@@ -557,6 +567,11 @@ local function render_panel()
         table.insert(P.hitboxes, {
             id = fid, kind = "button", rect = frect,
             on_click = function()
+                if is_more then
+                    close_panel()
+                    mp.commandv("script-message-to", "font_picker", "open-danmaku-font")
+                    return
+                end
                 options.fontname = fn.id
                 schedule_apply(false, true)
                 render_panel()

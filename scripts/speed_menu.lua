@@ -141,8 +141,9 @@ end
 
 local function draw_txt(ass, x, y, align, text, size, color, opacity, bold)
     ass:new_event()
-    local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fnLXGW WenKai Mono Lite\\fs%d\\1c&H%s&\\alpha&H%s&%s",
-        x, y, align, size, color, alpha_hex(opacity), bold and "\\b1" or "")
+    local ui_font = mp.get_property("osd-font") or "Microsoft YaHei UI"
+    local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fn%s\\fs%d\\1c&H%s&\\alpha&H%s&%s",
+        x, y, align, ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
     ass:append("{" .. tags .. "}" .. text)
 end
 

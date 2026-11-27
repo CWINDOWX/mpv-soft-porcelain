@@ -633,7 +633,7 @@ local DANMAKU_STYLE_PRESETS = {
         title = "清爽舒适（默认）",
         hint = "36px · 78% · 避让字幕",
         values = {
-            fontname = "LXGW WenKai Mono Lite", fontsize = 36, opacity = 0.78,
+            fontname = "Microsoft YaHei UI", fontsize = 36, opacity = 0.78,
             displayarea = 0.72, scrolltime = 13, fixtime = 5, bold = true,
             outline = 1.0, shadow = 0.5, max_screen_danmaku = 0, merge_tolerance = 5,
             block_top = false, block_bottom = false, block_scroll = false, block_color = false,
@@ -816,14 +816,20 @@ local function build_danmaku_style_menu_props()
     -- 6. 字体与外观（字体/粗体/描边/阴影/固定弹幕时长）
     local font_items = {}
     for _, frow in ipairs({
-        {"LXGW WenKai Mono Lite", "霞鹜文楷 Mono（内置推荐）", "柔和书卷质感"},
-        {"Microsoft YaHei UI",    "微软雅黑 UI",            "现代无衬线"},
-        {"SimHei",                "黑体 (SimHei)",          "经典醒目"},
-        {"YouYuan",               "幼圆 (YouYuan)",         "圆润轻快"},
-        {"sans-serif",            "系统默认无衬线",          "自动回退"},
+        {"Microsoft YaHei UI", "微软雅黑 UI（系统默认）", "现代无衬线"},
+        {"SimHei",             "黑体 (SimHei)",           "经典醒目"},
+        {"KaiTi",              "楷体 (KaiTi)",            "书卷风格"},
+        {"YouYuan",            "幼圆 (YouYuan)",          "圆润轻快"},
+        {"sans-serif",         "通用无衬线",              "自动回退"},
     }) do
         table.insert(font_items, choice_item(frow[2], frow[3], "fontname", frow[1], tostring(options.fontname) == frow[1]))
     end
+    table.insert(font_items, {
+        title = "选择本机更多字体…",
+        hint = "搜索全部已安装字体",
+        icon = "font_download",
+        value = { "script-message-to", "font_picker", "open-danmaku-font" },
+    })
 
     local outline_items = {}
     for _, orow in ipairs({
@@ -1468,7 +1474,7 @@ local REBUILD_STYLE_KEYS = {
     chConvert = true,
 }
 
-local function apply_danmaku_style_change(need_rebuild, toast)
+local function apply_danmaku_style_change(need_rebuild, toast, skip_menu_update)
     if type(save_danmaku_style) == "function" then
         save_danmaku_style()
     end
@@ -1483,12 +1489,12 @@ local function apply_danmaku_style_change(need_rebuild, toast)
     if toast then
         mp.osd_message(toast, 1.8)
     end
-    if uosc_available then
+    if uosc_available and not skip_menu_update then
         open_style_menu_uosc(nil, "update")
     end
 end
 
-mp.register_script_message("dm-style-set", function(key, val)
+mp.register_script_message("dm-style-set", function(key, val, mode)
     if not key then return end
     if key == "fontname" then
         options[key] = tostring(val)
@@ -1499,7 +1505,7 @@ mp.register_script_message("dm-style-set", function(key, val)
         if not num then return end
         options[key] = num
     end
-    apply_danmaku_style_change(REBUILD_STYLE_KEYS[key] == true)
+    apply_danmaku_style_change(REBUILD_STYLE_KEYS[key] == true, nil, mode == "silent")
 end)
 
 mp.register_script_message("dm-style-step", function(key, delta_str, min_str, max_str)

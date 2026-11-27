@@ -1277,3 +1277,17 @@ end
 
 -- Initial commit
 Manager:disable('user', options.disable_elements)
+
+-- Live UI font sync when custom_font is set to 'default'
+if options.custom_font == 'default' then
+	mp.observe_property('osd-font', 'string', function(_, val)
+		if val and val ~= '' and val ~= config.font then
+			config.font = val
+			if type(clear_text_width_cache) == 'function' then
+				clear_text_width_cache()
+			end
+			Elements:trigger('display')
+			request_render()
+		end
+	end)
+end

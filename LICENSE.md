@@ -4,7 +4,7 @@ This repository is a personal MPV `portable_config` customization suite combinin
 
 ## 1. Original Work (MIT License)
 
-All original scripts, theme customizations, and documentation created specifically for this repository — including `scripts/bangumi_sync/`, `scripts/shader_presets.lua`, `scripts/chapter_skip.lua`, `scripts/uosc_danmaku/modules/style_panel.lua`, and custom UI/theme modifications — are licensed under the **MIT License**:
+All original scripts, theme customizations, and documentation created specifically for this repository — including `scripts/bangumi_sync/`, `scripts/shader_presets.lua`, `scripts/chapter_skip.lua`, `scripts/speed_menu.lua`, `scripts/font_picker.lua`, `scripts/uosc_danmaku/modules/style_panel.lua`, and custom UI/theme modifications — are licensed under the **MIT License**:
 
 ```text
 MIT License
@@ -32,16 +32,15 @@ SOFTWARE.
 
 ## 2. Third-Party Components
 
-All third-party scripts, shaders, binaries, and fonts bundled in this configuration remain under their respective original licenses and copyrights:
+All third-party scripts, shaders, binaries, and icon fonts bundled in this configuration remain under their respective original licenses and copyrights:
 
-- **mpv_PlayKit / mpv-lazy** (`mpv.conf`, `profiles.conf`, `script-opts.conf`, `scripts/input_plus.lua`, `scripts/save_global_props.lua`, `vs/`): CC BY-NC-SA 4.0 / respective upstream licenses — https://github.com/hooke007/mpv_PlayKit
+- **mpv_PlayKit / mpv-lazy** (`mpv.conf`, `profiles.conf`, `script-opts.conf`, `scripts/save_global_props.lua`, `vs/`): CC BY-NC-SA 4.0 / respective upstream licenses — https://github.com/hooke007/mpv_PlayKit
 - **uosc** (`scripts/uosc/`): LGPL-2.1 — https://github.com/tomasklaen/uosc
 - **uosc_danmaku** (`scripts/uosc_danmaku/`): MIT — https://github.com/Tony15246/uosc_danmaku (see `scripts/uosc_danmaku/LICENSE`)
 - **thumbfast** (`scripts/thumbfast.lua`): MPL-2.0 — https://github.com/po5/thumbfast
-- **contextmenu_plus / mpv-menu-plugin** (`scripts/contextmenu_plus.lua`): GPL-2.0-only — https://github.com/tsl0922/mpv-menu-plugin
-- **GLSL Shaders** (`shaders/`): Individual licenses preserved in each `.glsl` file header, including MIT (Anime4K, AMD FSR, CfL), BSD (Adaptive Sharpen, QCOM SGEDS), LGPL-2.1 (hdeband), LGPL-3.0 (FSRCNNX, CuNNy, nnedi3), and CC BY-NC 4.0 (Ani4Kv2 ArtCNN weights).
-- **Fonts** (`fonts/`):
-  - `LXGWWenKaiMonoLite-Regular.ttf`: SIL Open Font License 1.1 — https://github.com/lxgw/LxgwWenKai
+- **GLSL Shaders** (`shaders/`): Individual licenses preserved in each `.glsl` file header, including MIT (Anime4K), Snapdragon GSR License (QCOM SGEDS), LGPL-2.1 (hdeband), LGPL-3.0 (FSRCNNX), and CC BY-NC 4.0 (Ani4Kv2 ArtCNN weights).
+- **Icon Fonts** (`fonts/`):
   - `MaterialIconsRound-Regular.otf`: Apache License 2.0 — https://github.com/google/material-design-icons
+  - `uosc_textures.ttf`: bundled with `uosc` (LGPL-2.1)
 
-Because certain bundled components include non-commercial (`CC BY-NC`) and copyleft (`GPL-2.0-only`, `LGPL`) terms, **this repository as a combined distribution is intended for non-commercial personal use only**, and redistributions must preserve all original license headers and notices.
+Because certain bundled components include non-commercial (`CC BY-NC`) and copyleft (`LGPL`) terms, **this repository as a combined distribution is intended for non-commercial personal use only**, and redistributions must preserve all original license headers and notices.

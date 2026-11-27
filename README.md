@@ -26,10 +26,10 @@
 - **浅色极简界面**
   - 柔雾瓷白配色，搭配圆角边框、常驻标题栏与底部控制栏。
   - 标题栏自动显示当前番剧名、集数与单集标题，点击可切回原文件名。
-  - 右键菜单和底栏弹窗随光标就近展开，操作顺手。
+  - 右键菜单和底栏弹窗随光标就近展开，可在「工具」中独立切换界面字体（支持搜索本机已安装字体）。
 - **自动弹幕与样式面板**
   - 打开本地番剧自动匹配并加载弹幕，也支持手动搜索、添加外部弹幕源和调整延迟。
-  - 按 `Ctrl+Shift+D` 打开可视化弹幕样式面板，实时拖动调节字号、透明度、显示区域、速度、描边、阴影和密度，支持风格预设、字体切换、屏蔽与简繁转换。
+  - 按 `Ctrl+Shift+D` 打开可视化弹幕样式面板，实时拖动调节字号、透明度、显示区域、速度、描边、阴影和密度，支持风格预设、独立切换本机字体、屏蔽与简繁转换。
 - **画质预设**
   - 内置原画、轻锐化、Anime4K、ArtCNN、FSRCNNX 等 8 档预设，可叠加去色带与 60fps 补帧。
   - 切换后自动记住，下次打开自动恢复。
@@ -55,6 +55,7 @@
 
 - **Bangumi 登录**：按 `Ctrl+B`（或点底栏书签图标）打开菜单 → 生成并复制 Access Token → 点击「从剪贴板登录」。
 - **弹幕接口**：默认使用社区公共弹幕中继，如遇访问波动或失效，可在 `script-opts/uosc_danmaku.conf` 中修改 `api_server` 更换为自己的中继地址。
+- **自定义字体**：默认使用系统字体，右键「工具 → 界面字体 / 弹幕字体」或弹幕样式面板可随时搜索并切换本机已安装的任意字体（如霞鹜文楷、思源黑体等）。
 
 ---
 
@@ -89,9 +90,8 @@
 | uosc | [tomasklaen/uosc](https://github.com/tomasklaen/uosc) | LGPL-2.1 |
 | uosc_danmaku | [Tony15246/uosc_danmaku](https://github.com/Tony15246/uosc_danmaku) | MIT |
 | thumbfast | [po5/thumbfast](https://github.com/po5/thumbfast) | MPL-2.0 |
-| contextmenu_plus | [tsl0922/mpv-menu-plugin](https://github.com/tsl0922/mpv-menu-plugin) | GPL-2.0-only |
-| Anime4K / ArtCNN / FSRCNNX 等着色器 | 见各 `.glsl` 文件头 | MIT / BSD / LGPL / CC BY-NC 4.0 |
-| 霞鹜文楷 Mono Lite / Material Icons | [LxgwWenKai](https://github.com/lxgw/LxgwWenKai) / Google | SIL OFL 1.1 / Apache-2.0 |
+| Anime4K / ArtCNN / FSRCNNX 等着色器 | 见各 `.glsl` 文件头 | MIT / LGPL / CC BY-NC 4.0 |
+| Material Icons 图标字体 | Google Material Icons | Apache-2.0 |
 
 > [!IMPORTANT]
-> 因包含非商业（`CC BY-NC`）及 `GPL-2.0-only` / `LGPL` 组件，本整合配置仅供个人非商业使用。
+> 因包含非商业（`CC BY-NC`）及 `LGPL` 组件，本整合配置仅供个人非商业使用。

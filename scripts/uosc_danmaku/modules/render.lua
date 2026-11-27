@@ -90,7 +90,7 @@ function render(pos_arg)
         return
     end
 
-    local fontname = tostring(options.fontname or "LXGW WenKai Mono Lite")
+    local fontname = tostring(options.fontname or "Microsoft YaHei UI")
     local fontsize = tonumber(options.fontsize) or 36
     local opacity = tonumber(options.opacity) or 0.78
     local displayarea_ratio = tonumber(options.displayarea) or 0.72

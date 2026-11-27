@@ -433,6 +433,9 @@ function Controls:update_dimensions()
 			dock_buttons[el.name] = {ax = el.ax, ay = el.ay, bx = el.bx, by = el.by}
 		end
 	end
+	local tl = Elements.timeline
+	local tl_rect = (tl and tl.enabled and tl.ax and tl.bx)
+		and {ax = tl.ax, ay = tl.ay, bx = tl.bx, by = tl.by} or nil
 	mp.set_property_native('user-data/uosc/controls/dock', {
 		ax = math.max(window_border + round(4 * state.scale), self.ax - pad_x),
 		ay = self.ay - pad_y,
@@ -441,6 +444,7 @@ function Controls:update_dimensions()
 		scale = state.scale,
 		wb = window_border,
 		buttons = dock_buttons,
+		timeline = tl_rect,
 	})
 
 	Elements:update_proximities()

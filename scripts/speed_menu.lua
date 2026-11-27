@@ -58,6 +58,13 @@ local P = {
     raise_timer = nil,
     keys_bound = false,
     prev_menu_type = nil,
+    dock = nil,
+    margin_top = 0,
+    margin_left = 0,
+    margin_right = 0,
+    margin_bottom = 0,
+    ui_font = mp.get_property("osd-font") or "Microsoft YaHei UI",
+    speed = mp.get_property_number("speed", 1) or 1,
 }
 
 local function clamp(lo, v, hi)
@@ -141,14 +148,13 @@ end
 
 local function draw_txt(ass, x, y, align, text, size, color, opacity, bold)
     ass:new_event()
-    local ui_font = mp.get_property("osd-font") or "Microsoft YaHei UI"
     local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fn%s\\fs%d\\1c&H%s&\\alpha&H%s&%s",
-        x, y, align, ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
+        x, y, align, P.ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
     ass:append("{" .. tags .. "}" .. text)
 end
 
 local function update_uosc_button()
-    local spd = mp.get_property_number("speed", 1) or 1
+    local spd = P.speed or 1
     local is_custom = not approx(spd, 1.0)
     local label = fmt_badge(spd)
 
@@ -173,7 +179,7 @@ local function render_panel()
     local w, h = P.osd_w, P.osd_h
     if w <= 200 or h <= 160 then return end
 
-    local dock = mp.get_property_native("user-data/uosc/controls/dock")
+    local dock = P.dock
     local scale = (type(dock) == "table" and tonumber(dock.scale))
         or clamp(0.8, math.min(h / 720, w / 1280), 1.35)
     local wb = (type(dock) == "table" and tonumber(dock.wb)) or 0
@@ -189,10 +195,10 @@ local function render_panel()
     local card_w = math.min(round(328 * scale), w - wb * 2 - round(24 * scale))
     local card_h = pad_top + header_h + gap_y + slider_h + pad_bot
 
-    local top_safe = math.floor(h * (mp.get_property_number("video-margin-ratio-top", 0) or 0)) + round(10 * scale)
-    local left_safe = math.max(wb, math.floor(w * (mp.get_property_number("video-margin-ratio-left", 0) or 0))) + round(12 * scale)
-    local right_safe = math.max(wb, math.floor(w * (mp.get_property_number("video-margin-ratio-right", 0) or 0))) + round(12 * scale)
-    local bot_safe = h - math.max(wb, math.floor(h * (mp.get_property_number("video-margin-ratio-bottom", 0) or 0))) - round(12 * scale)
+    local top_safe = math.floor(h * P.margin_top) + round(10 * scale)
+    local left_safe = math.max(wb, math.floor(w * P.margin_left)) + round(12 * scale)
+    local right_safe = math.max(wb, math.floor(w * P.margin_right)) + round(12 * scale)
+    local bot_safe = h - math.max(wb, math.floor(h * P.margin_bottom)) - round(12 * scale)
 
     local ax, ay
     local dock_gap = round(12 * scale)
@@ -236,7 +242,7 @@ local function render_panel()
     local cx2 = bx - pad_x
     local y = ay + pad_top
 
-    local spd = mp.get_property_number("speed", 1) or 1
+    local spd = P.speed or 1
     local is_custom = not approx(spd, 1.0)
     local norm = val_to_norm(spd)
     local slider_active = P.dragging or (P.hover_id == "slider")
@@ -373,11 +379,13 @@ local function on_left_down()
     end
 
     if not pt_in(P.mx, P.my, P.card_rect) then
-        local dock = mp.get_property_native("user-data/uosc/controls/dock")
+        local dock = P.dock
         local in_dock = type(dock) == "table" and pt_in(P.mx, P.my, dock)
+        local in_timeline = type(dock) == "table"
+            and (pt_in(P.mx, P.my, dock.timeline) or (tonumber(dock.by) and P.my >= dock.by))
         local in_self_btn = in_dock and type(dock.buttons) == "table"
             and pt_in(P.mx, P.my, dock.buttons.speed_menu)
-        if in_dock and not in_self_btn then
+        if (in_dock and not in_self_btn) or in_timeline then
             close_panel(true)
             mp.commandv("script-message-to", "uosc", "click-controls", "speed_menu",
                 tostring(P.mx), tostring(P.my))
@@ -473,7 +481,7 @@ close_panel = function(instant)
     P.dragging = false
     P.hover_id = nil
     unbind_keys()
-    mp.commandv("script-message-to", "uosc", "external-popup", "false", "false")
+    mp.commandv("script-message-to", "uosc", "external-popup", "speed_menu", "false", "false")
     update_uosc_button()
 
     if P.fade_timer then P.fade_timer:kill(); P.fade_timer = nil end
@@ -517,7 +525,8 @@ local function open_panel()
         P.anchor = nil
     end
 
-    local dock = mp.get_property_native("user-data/uosc/controls/dock")
+    local dock = P.dock or mp.get_property_native("user-data/uosc/controls/dock")
+    P.dock = dock
     local scale = (type(dock) == "table" and tonumber(dock.scale)) or 1
     P.from_controls = type(dock) == "table" and tonumber(dock.ay) ~= nil
         and (P.anchor == nil or P.anchor.y >= dock.ay - round(24 * scale))
@@ -525,7 +534,7 @@ local function open_panel()
     -- Close any overlapping uosc menu or danmaku style panel
     mp.commandv("script-message-to", "uosc", "close-menu")
     mp.commandv("script-message-to", "uosc_danmaku", "close_danmaku_style_panel")
-    mp.commandv("script-message-to", "uosc", "external-popup", "true", P.from_controls and "true" or "false")
+    mp.commandv("script-message-to", "uosc", "external-popup", "speed_menu", "true", P.from_controls and "true" or "false")
 
     P.open = true
     P.dragging = false
@@ -559,6 +568,7 @@ end
 mp.register_script_message("open-menu", open_panel)
 mp.register_script_message("toggle", open_panel)
 mp.register_script_message("close", function() close_panel(true) end)
+mp.register_script_message("uosc-close-popups", function() close_panel(true) end)
 mp.register_script_message("uosc-version", update_uosc_button)
 
 -- Observers
@@ -568,7 +578,31 @@ end)
 mp.observe_property("osd-height", "number", function(_, v)
     if v and v > 0 then P.osd_h = v; if P.open then render_panel() end end
 end)
-mp.observe_property("speed", "number", function()
+mp.observe_property("osd-font", "string", function(_, v)
+    if v and v ~= "" then P.ui_font = v; if P.open then render_panel() end end
+end)
+mp.observe_property("user-data/uosc/controls/dock", "native", function(_, v)
+    P.dock = v
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-top", "number", function(_, v)
+    P.margin_top = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-left", "number", function(_, v)
+    P.margin_left = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-right", "number", function(_, v)
+    P.margin_right = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-bottom", "number", function(_, v)
+    P.margin_bottom = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("speed", "number", function(_, v)
+    P.speed = v or 1
     update_uosc_button()
     if P.open or P.opacity > 0.01 then render_panel() end
 end)

@@ -2,6 +2,7 @@
     独立字体选择器（支持界面字体与弹幕字体各自自由切换 + 搜索系统已安装字体 + 持久化保存）
     - 界面字体：script-message-to font_picker open-ui-font（持久化到 ~~/saved-ui-font.json）
     - 弹幕字体：script-message-to font_picker open-danmaku-font（调用 uosc_danmaku 实时保存）
+    - 系统字体列表缓存于 ~~/_cache/system-fonts.json，下次启动秒开并在后台静默刷新
 ]]
 
 local mp = require("mp")
@@ -9,6 +10,8 @@ local utils = require("mp.utils")
 
 local DEFAULT_FONT = "Microsoft YaHei UI"
 local UI_FONT_STATE_PATH = mp.command_native({"expand-path", "~~/saved-ui-font.json"})
+local CACHE_DIR = mp.command_native({"expand-path", "~~/_cache"})
+local FONT_CACHE_PATH = mp.command_native({"expand-path", "~~/_cache/system-fonts.json"})
 
 local CURATED_FONTS = {
     { id = "Microsoft YaHei UI", label = "微软雅黑 UI", always = true },
@@ -21,6 +24,7 @@ local CURATED_FONTS = {
 }
 
 local cached_system_fonts = nil
+local refreshed_this_session = false
 local loading_system_fonts = false
 local pending_callbacks = {}
 local current_dm_font = DEFAULT_FONT
@@ -61,12 +65,63 @@ local function load_saved_danmaku_font()
     return current_dm_font
 end
 
-local function fetch_system_fonts(cb)
-    if cached_system_fonts then
-        cb(cached_system_fonts)
-        return
+local function build_font_index(list)
+    local seen = {}
+    local clean = {}
+    for _, item in ipairs(list) do
+        if type(item) == "string" and item ~= "" and not seen[item] then
+            seen[item] = true
+            table.insert(clean, item)
+        end
     end
-    table.insert(pending_callbacks, cb)
+    table.sort(clean, function(a, b) return a:lower() < b:lower() end)
+    return { list = clean, set = seen }
+end
+
+local function font_lists_equal(a, b)
+    if not a or not b then return false end
+    if #a.list ~= #b.list then return false end
+    for i = 1, #a.list do
+        if a.list[i] ~= b.list[i] then return false end
+    end
+    return true
+end
+
+local function load_disk_font_cache()
+    local f = io.open(FONT_CACHE_PATH, "rb")
+    if not f then return nil end
+    local raw = f:read("*a")
+    f:close()
+    if not raw or raw == "" then return nil end
+    local parsed = utils.parse_json(raw)
+    if type(parsed) == "table" and type(parsed.fonts) == "table" and #parsed.fonts > 0 then
+        return build_font_index(parsed.fonts)
+    end
+    return nil
+end
+
+local function save_disk_font_cache(list)
+    if type(list) ~= "table" or #list == 0 then return end
+    local payload = utils.format_json({ fonts = list })
+    if not payload then return end
+    local f = io.open(FONT_CACHE_PATH, "wb")
+    if not f then
+        -- Ensure ~~/_cache directory exists before retrying
+        mp.command_native({
+            name = "subprocess",
+            playback_only = false,
+            args = { "cmd", "/c", "mkdir", CACHE_DIR },
+        })
+        f = io.open(FONT_CACHE_PATH, "wb")
+    end
+    if f then
+        f:write(payload)
+        f:close()
+    end
+end
+
+local function scan_system_fonts_async(cb)
+    if cb then table.insert(pending_callbacks, cb) end
     if loading_system_fonts then return end
     loading_system_fonts = true
 
@@ -82,23 +137,31 @@ local function fetch_system_fonts(cb)
         args = { "powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd },
     }, function(success, res)
         loading_system_fonts = false
-        local seen = {}
-        local list = {}
+        refreshed_this_session = true
+        local raw_list = {}
         if success and res and res.status == 0 and type(res.stdout) == "string" then
             for line in res.stdout:gmatch("[^\r\n]+") do
                 local name = line:gsub("^%s+", ""):gsub("%s+$", "")
-                if name ~= "" and not seen[name] then
-                    seen[name] = true
-                    table.insert(list, name)
+                if name ~= "" then
+                    table.insert(raw_list, name)
                 end
             end
         end
-        table.sort(list, function(a, b) return a:lower() < b:lower() end)
-        cached_system_fonts = { list = list, set = seen }
+
+        local fresh = build_font_index(raw_list)
+        local changed = not font_lists_equal(cached_system_fonts, fresh)
+        if #fresh.list > 0 then
+            cached_system_fonts = fresh
+            if changed then
+                save_disk_font_cache(fresh.list)
+            end
+        elseif not cached_system_fonts then
+            cached_system_fonts = fresh
+        end
 
         local cbs = pending_callbacks
         pending_callbacks = {}
-        for _, fn in ipairs(cbs) do fn(cached_system_fonts) end
+        for _, fn in ipairs(cbs) do fn(cached_system_fonts, changed) end
     end)
 end
 
@@ -178,23 +241,31 @@ end
 
 local function open_font_menu(mode, action)
     local is_ui = (mode == "ui")
+    local menu_type = is_ui and "font_picker_ui" or "font_picker_dm"
     local active_font = is_ui
         and (mp.get_property("osd-font") or DEFAULT_FONT)
         or load_saved_danmaku_font()
     local uosc_action = action or "open-menu"
 
-    if cached_system_fonts then
-        mp.commandv("script-message-to", "uosc", uosc_action,
-            utils.format_json(build_menu_props(mode, active_font, cached_system_fonts)))
-    else
-        mp.commandv("script-message-to", "uosc", uosc_action,
-            utils.format_json(build_menu_props(mode, active_font, nil)))
-        fetch_system_fonts(function(sys_fonts)
-            local latest = is_ui
-                and (mp.get_property("osd-font") or DEFAULT_FONT)
-                or load_saved_danmaku_font()
-            mp.commandv("script-message-to", "uosc", "update-menu",
-                utils.format_json(build_menu_props(mode, latest, sys_fonts)))
+    if not cached_system_fonts then
+        cached_system_fonts = load_disk_font_cache()
+    end
+
+    -- Immediately show cached list (instant on repeat runs) or loading placeholder
+    mp.commandv("script-message-to", "uosc", uosc_action,
+        utils.format_json(build_menu_props(mode, active_font, cached_system_fonts)))
+
+    -- Refresh in background once per session; only update menu if still open and list changed
+    if not refreshed_this_session then
+        local had_cache = (cached_system_fonts ~= nil and #cached_system_fonts.list > 0)
+        scan_system_fonts_async(function(sys_fonts, changed)
+            if (not had_cache or changed) and mp.get_property("user-data/uosc/menu/type") == menu_type then
+                local latest = is_ui
+                    and (mp.get_property("osd-font") or DEFAULT_FONT)
+                    or load_saved_danmaku_font()
+                mp.commandv("script-message-to", "uosc", "update-menu",
+                    utils.format_json(build_menu_props(mode, latest, sys_fonts)))
+            end
         end)
     end
 end

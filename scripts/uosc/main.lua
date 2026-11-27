@@ -1189,23 +1189,50 @@ end)
 mp.register_script_message('flash-elements', function(elements) Elements:flash(comma_split(elements)) end)
 mp.register_script_message('overwrite-binding', function(name, command) key_binding_overwrites[name] = command end)
 mp.register_script_message('disable-elements', function(id, elements) Manager:disable(id, elements) end)
-mp.register_script_message('external-popup', function(active, keep_controls)
-	state.external_popup = (active == 'true' or active == '1' or active == 'yes')
-	state.keep_controls_visible = (keep_controls == 'true' or keep_controls == '1' or keep_controls == 'yes')
+local external_popups = {}
+mp.register_script_message('external-popup', function(id, active, keep_controls)
+	-- Backwards-compatible with 2-arg form (active, keep_controls)
+	if id == 'true' or id == 'false' or id == '1' or id == '0' or id == 'yes' or id == 'no' then
+		keep_controls = active
+		active = id
+		id = 'default'
+	end
+	id = (id and id ~= '') and id or 'default'
+	local is_active = (active == 'true' or active == '1' or active == 'yes')
+	local keep = (keep_controls == 'true' or keep_controls == '1' or keep_controls == 'yes')
+	if is_active then
+		external_popups[id] = keep
+	else
+		external_popups[id] = nil
+	end
+	local any_active, any_keep = false, false
+	for _, k in pairs(external_popups) do
+		any_active = true
+		if k then any_keep = true end
+	end
+	state.external_popup = any_active
+	state.keep_controls_visible = any_keep
 	request_render()
 end)
 mp.register_script_message('click-controls', function(exclude_name, sx, sy)
-	if not Elements.controls or not Elements.controls.enabled then return end
 	local mx, my = tonumber(sx) or cursor.x, tonumber(sy) or cursor.y
-	for _, control in ipairs(Elements.controls.layout) do
-		local el = control.element
-		if el and el.enabled and el.handle_cursor_click
-			and mx >= el.ax and mx <= el.bx and my >= el.ay and my <= el.by then
-			if not exclude_name or el.name ~= exclude_name then
-				el:handle_cursor_click()
+	if Elements.controls and Elements.controls.enabled then
+		for _, control in ipairs(Elements.controls.layout) do
+			local el = control.element
+			if el and el.enabled and el.handle_cursor_click
+				and mx >= el.ax and mx <= el.bx and my >= el.ay and my <= el.by then
+				if not exclude_name or exclude_name == '' or el.name ~= exclude_name then
+					el:handle_cursor_click()
+				end
+				return
 			end
-			return
 		end
+	end
+	local tl = Elements.timeline
+	if tl and tl.enabled and state.time and state.duration
+		and mx >= tl.ax and mx <= tl.bx and my >= tl.ay and my <= tl.by then
+		mp.commandv('seek', tl:get_time_at_x(mx), 'absolute+exact')
+		tl:flash_progress()
 	end
 end)
 if options.idlescreen then

@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import re
@@ -6,6 +7,16 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 USER_AGENT = "mpv-lazy-bangumi-sync/1.0 (https://github.com/bangumi/api)"
 API_BASE = "https://api.bgm.tv"
@@ -26,9 +37,56 @@ def load_json(path, default):
 
 
 def save_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    tmp_path = f"{path}.{os.getpid()}.{time.time_ns()}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+@contextlib.contextmanager
+def file_lock(lock_path, timeout=5.0):
+    parent = os.path.dirname(os.path.abspath(lock_path))
+    os.makedirs(parent, exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+    locked = False
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                if msvcrt is not None:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                elif fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("文件锁超时，请稍后重试")
+                time.sleep(0.05)
+        yield
+    finally:
+        if locked:
+            try:
+                if msvcrt is not None:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                elif fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        os.close(fd)
 
 
 def api_request(method, path, token=None, body=None, query=None):
@@ -198,10 +256,16 @@ def cmd_search(cfg_dir, keyword):
 
 def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name, ep_num=None):
     mp = os.path.join(cfg_dir, "bangumi-map.json")
-    mapping = load_json(mp, {})
+    lock_path = os.path.join(cfg_dir, "_cache", "bangumi-map.lock")
     norm_key = os.path.normpath(folder_key).lower()
-    mapping[norm_key] = {"id": int(subject_id), "name": subject_name}
-    save_json(mp, mapping)
+    try:
+        with file_lock(lock_path):
+            mapping = load_json(mp, {})
+            mapping[norm_key] = {"id": int(subject_id), "name": subject_name}
+            save_json(mp, mapping)
+    except Exception as e:
+        out_json({"ok": False, "error": str(e) or "写入关联映射失败"})
+        return
 
     ep_title = ""
     if ep_num is not None and str(ep_num).strip() != "":
@@ -238,7 +302,8 @@ def fetch_subject_episodes(subject_id, token=None):
     sid = int(subject_id)
     all_eps = []
     offset = 0
-    for _ in range(20):
+    complete = False
+    for _ in range(50):
         status, obj = api_request(
             "GET",
             "/v0/episodes",
@@ -255,9 +320,9 @@ def fetch_subject_episodes(subject_id, token=None):
             )
         if status < 200 or status >= 300:
             if status == 0:
-                return None, "网络请求失败"
+                return None, False, "网络请求失败"
             msg = obj.get("description") or obj.get("message") or f"HTTP {status}"
-            return None, msg
+            return None, False, msg
         batch = obj.get("data") or []
         for ep in batch:
             all_eps.append({
@@ -270,8 +335,9 @@ def fetch_subject_episodes(subject_id, token=None):
         offset += len(batch)
         total = obj.get("total")
         if not batch or (total is not None and offset >= int(total)):
+            complete = True
             break
-    return all_eps, None
+    return all_eps, complete, None
 
 
 def get_episode_info(cfg_dir, subject_id, ep_num, token=None, allow_cache=True):
@@ -289,15 +355,16 @@ def get_episode_info(cfg_dir, subject_id, ep_num, token=None, allow_cache=True):
     if allow_cache and sid_key in cache and isinstance(cache[sid_key], dict):
         entry = cache[sid_key]
         age = now - int(entry.get("ts") or 0)
+        is_complete = bool(entry.get("complete", True))
         found = find_episode_in_list(entry.get("episodes"), target_ep)
         if found:
             has_title = bool(extract_ep_title(found))
             if (has_title and age < 7 * 86400) or age < 3 * 3600:
                 return found, None
-        elif age < 3 * 3600:
+        elif is_complete and age < 3 * 3600:
             return None, None
 
-    episodes, err = fetch_subject_episodes(sid, token=token)
+    episodes, complete, err = fetch_subject_episodes(sid, token=token)
     if err is not None:
         # Fallback to stale cache if available when offline
         if sid_key in cache and isinstance(cache[sid_key], dict):
@@ -306,7 +373,7 @@ def get_episode_info(cfg_dir, subject_id, ep_num, token=None, allow_cache=True):
                 return stale, None
         return None, err
 
-    cache[sid_key] = {"ts": now, "episodes": episodes}
+    cache[sid_key] = {"ts": now, "complete": complete, "episodes": episodes}
     if len(cache) > 200:
         ordered = sorted(cache.items(), key=lambda kv: int((kv[1] or {}).get("ts") or 0), reverse=True)
         cache = dict(ordered[:200])

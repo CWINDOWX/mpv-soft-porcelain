@@ -931,7 +931,7 @@ local function build_danmaku_style_menu_props()
     })
 
     local area_label = area_pct .. "%" .. (area_pct == 72 and " 避让字幕" or "")
-    local font_short = tostring(options.fontname):gsub("LXGW WenKai Mono Lite", "霞鹜文楷"):gsub("Microsoft YaHei UI", "微软雅黑")
+    local font_short = tostring(options.fontname):gsub("Microsoft YaHei UI", "微软雅黑")
 
     return {
         type = "menu_style",

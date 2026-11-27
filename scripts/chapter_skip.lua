@@ -269,9 +269,14 @@ local function draw_round_rect(ass, ax, ay, bx, by, r, color, opacity, border, b
     ass:draw_stop()
 end
 
+local cached_ui_font = mp.get_property("osd-font") or "Microsoft YaHei UI"
+mp.observe_property("osd-font", "string", function(_, v)
+    if v and v ~= "" then cached_ui_font = v end
+end)
+
 local function draw_text(ass, x, y, align, text, size, color, opacity, bold, font)
     ass:new_event()
-    local ui_font = font or mp.get_property("osd-font") or "Microsoft YaHei UI"
+    local ui_font = font or cached_ui_font
     local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fn%s\\fs%d\\1c&H%s&\\alpha&H%s&%s",
         x, y, align, ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
     ass:append("{" .. tags .. "}" .. text)

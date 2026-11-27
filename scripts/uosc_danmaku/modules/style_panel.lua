@@ -35,6 +35,13 @@ local P = {
     fade_timer = nil,
     rebuild_timer = nil,
     keys_bound = false,
+    prev_menu_type = nil,
+    dock = nil,
+    margin_top = 0,
+    margin_left = 0,
+    margin_right = 0,
+    margin_bottom = 0,
+    ui_font = mp.get_property("osd-font") or "Microsoft YaHei UI",
 }
 
 local PRESETS = {
@@ -309,7 +316,7 @@ end
 
 local function draw_txt(ass, x, y, align, text, size, color, opacity, bold, font)
     ass:new_event()
-    local ui_font = font or mp.get_property("osd-font") or "Microsoft YaHei UI"
+    local ui_font = font or P.ui_font
     local tags = string.format("\\pos(%.1f,%.1f)\\rDefault\\an%d\\blur0\\bord0\\shad0\\fn%s\\fs%d\\1c&H%s&\\alpha&H%s&%s",
         x, y, align, ui_font, size, color, alpha_hex(opacity), bold and "\\b1" or "")
     ass:append("{" .. tags .. "}" .. text)
@@ -332,9 +339,11 @@ local function render_panel()
     local op = P.opacity
     local scale = clamp(0.76, math.min(h / 740, w / 1180), 1.30)
 
-    local top_safe = math.floor(h * (mp.get_property_number("video-margin-ratio-top", 0) or 0)) + math.floor(14 * scale)
-    local bot_safe = math.floor(h * (mp.get_property_number("video-margin-ratio-bottom", 0) or 0)) + math.floor(16 * scale)
-    local right_safe = math.floor(w * (mp.get_property_number("video-margin-ratio-right", 0) or 0)) + math.floor(18 * scale)
+    local top_safe = math.floor(h * P.margin_top) + math.floor(14 * scale)
+    local bot_safe = math.floor(h * P.margin_bottom) + math.floor(16 * scale)
+    local right_safe = math.floor(w * P.margin_right) + math.floor(18 * scale)
+    local dock_top = (type(P.dock) == "table" and tonumber(P.dock.ay)) and (math.floor(P.dock.ay) - math.floor(12 * scale)) or nil
+    local bot_limit = dock_top and math.min(h - bot_safe, dock_top) or (h - bot_safe)
 
     local pad = math.floor(18 * scale)
     local card_w = math.floor(386 * scale)
@@ -353,9 +362,9 @@ local function render_panel()
         + (2 * toggle_row_h + math.floor(6 * scale)) + sec_gap
         + footer_h + pad
 
-    -- Scale slightly if window is very short
-    local avail_h = h - top_safe - bot_safe
-    if total_h > avail_h and avail_h > 300 then
+    -- Scale slightly if window is very short (respecting visible bottom controls dock)
+    local avail_h = bot_limit - top_safe
+    if total_h > avail_h and avail_h > 260 then
         local shrink = avail_h / total_h
         scale = scale * shrink
         pad = math.floor(18 * scale)
@@ -372,7 +381,7 @@ local function render_panel()
             + sec_gap + footer_h + pad
     end
 
-    local left_safe = math.floor(w * (mp.get_property_number("video-margin-ratio-left", 0) or 0)) + math.floor(18 * scale)
+    local left_safe = math.floor(w * P.margin_left) + math.floor(18 * scale)
     local ax, ay
     if P.anchor then
         local gap_x = math.floor(10 * scale)
@@ -386,7 +395,7 @@ local function render_panel()
         else
             ax = math.floor(clamp(left_safe, P.anchor.x - card_w / 2, math.max(left_safe, w - right_safe - card_w)))
         end
-        ay = math.floor(clamp(top_safe, P.anchor.y - total_h / 2, math.max(top_safe, h - bot_safe - total_h)))
+        ay = math.floor(clamp(top_safe, P.anchor.y - total_h / 2, math.max(top_safe, bot_limit - total_h)))
     else
         ax = w - right_safe - card_w
         ay = top_safe + math.floor((avail_h - total_h) / 2)
@@ -701,7 +710,17 @@ local function on_left_down()
         P.mx, P.my = pos.x, pos.y
     end
     if not pt_in(P.mx, P.my, P.card_rect) then
-        close_danmaku_style_panel()
+        local dock = P.dock
+        local in_dock = type(dock) == "table" and pt_in(P.mx, P.my, dock)
+        local in_timeline = type(dock) == "table"
+            and (pt_in(P.mx, P.my, dock.timeline) or (tonumber(dock.by) and P.my >= dock.by))
+        if uosc_available and (in_dock or in_timeline) then
+            close_danmaku_style_panel(true)
+            mp.commandv("script-message-to", "uosc", "click-controls", "",
+                tostring(P.mx), tostring(P.my))
+        else
+            close_danmaku_style_panel()
+        end
         return
     end
     local hb = find_hitbox(P.mx, P.my)
@@ -779,7 +798,7 @@ function close_danmaku_style_panel(instant)
     P.hover_id = nil
     unbind_panel_keys()
     if uosc_available then
-        mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "")
+        mp.commandv("script-message-to", "uosc", "external-popup", "danmaku_style_panel", "false", "false")
     end
     if P.fade_timer then P.fade_timer:kill(); P.fade_timer = nil end
 
@@ -817,10 +836,13 @@ function open_danmaku_style_panel()
     else
         P.anchor = nil
     end
+    if not P.dock then
+        P.dock = mp.get_property_native("user-data/uosc/controls/dock")
+    end
     if uosc_available then
         mp.commandv("script-message-to", "uosc", "close-menu")
         mp.commandv("script-message-to", "speed_menu", "close")
-        mp.commandv("script-message-to", "uosc", "disable-elements", "danmaku_style_panel", "volume,controls,timeline,speed")
+        mp.commandv("script-message-to", "uosc", "external-popup", "danmaku_style_panel", "true", "true")
     end
     P.open = true
     P.dragging = nil
@@ -855,6 +877,35 @@ end)
 mp.observe_property("osd-height", "number", function(_, v)
     if v and v > 0 then P.osd_h = v; if P.open then render_panel() end end
 end)
+mp.observe_property("osd-font", "string", function(_, v)
+    if v and v ~= "" then P.ui_font = v; if P.open then render_panel() end end
+end)
+mp.observe_property("user-data/uosc/controls/dock", "native", function(_, v)
+    P.dock = v
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-top", "number", function(_, v)
+    P.margin_top = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-left", "number", function(_, v)
+    P.margin_left = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-right", "number", function(_, v)
+    P.margin_right = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("video-margin-ratio-bottom", "number", function(_, v)
+    P.margin_bottom = v or 0
+    if P.open then render_panel() end
+end)
+mp.observe_property("user-data/uosc/menu/type", "native", function(_, val)
+    if P.open and val ~= nil and val ~= "" and val ~= P.prev_menu_type then
+        close_danmaku_style_panel(true)
+    end
+    P.prev_menu_type = val
+end)
 mp.observe_property("mouse-pos", "native", function(_, pos)
     if type(pos) ~= "table" or not pos.x or not pos.y then return end
     P.mx, P.my = pos.x, pos.y
@@ -876,6 +927,10 @@ mp.observe_property("mouse-pos", "native", function(_, pos)
         P.hover_id = nid
         render_panel()
     end
+end)
+
+mp.register_script_message("uosc-close-popups", function()
+    close_danmaku_style_panel(true)
 end)
 
 mp.register_script_message("toggle_danmaku_style_panel", open_danmaku_style_panel)

@@ -137,6 +137,9 @@ function Timeline:clear_thumbnail()
 end
 
 function Timeline:handle_cursor_down()
+	if state.external_popup then
+		mp.commandv('script-message', 'uosc-close-popups')
+	end
 	self.pressed = {pause = state.pause, distance = 0, last = {x = cursor.x, y = cursor.y}}
 	mp.set_property_native('pause', true)
 	self:set_from_cursor()

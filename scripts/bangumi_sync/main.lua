@@ -48,6 +48,7 @@ local state = {
     login_status = nil, -- nil | "loading" | "error"
     login_error = nil,
     playback_seq = 0,
+    match_seq = 0,
     search_seq = 0
 }
 
@@ -195,8 +196,10 @@ local function match_current_file(hint_anime)
     if duration > 0 and duration < 60 then return end
 
     state.current_path = path
+    state.match_seq = state.match_seq + 1
+    local req_seq = state.match_seq
     run_cli({ "match", path, hint_anime or "" }, function(res)
-        if state.current_path ~= path then return end
+        if req_seq ~= state.match_seq or state.current_path ~= path then return end
         if res.ok and res.matched then
             state.subject_id = res.subject_id
             state.subject_name = res.subject_name
@@ -213,11 +216,12 @@ local function match_current_file(hint_anime)
             -- feed the resolved official Chinese title + episode so danmaku loads automatically!
             if state.subject_name and state.episode then
                 local captured_path = path
+                local captured_seq = req_seq
                 local captured_name = state.subject_name
                 local captured_season = state.season
                 local captured_ep = state.episode
                 mp.add_timeout(4.5, function()
-                    if state.current_path ~= captured_path then return end
+                    if captured_seq ~= state.match_seq or state.current_path ~= captured_path then return end
                     if not mp.get_property_bool("user-data/uosc_danmaku/has-danmaku", false) then
                         msg.info("向 uosc_danmaku 补充中文番剧名以自动加载弹幕: " .. captured_name)
                         mp.commandv("script-message-to", "uosc_danmaku", "match-by-title",
@@ -586,6 +590,8 @@ mp.register_script_message("open-search", function() open_search_menu() end)
 mp.register_script_message("do-search", function(query) execute_search(query) end)
 
 mp.register_script_message("bind-subject", function(sid, sname)
+    state.match_seq = state.match_seq + 1
+    local bind_seq = state.match_seq
     state.subject_id = tonumber(sid)
     state.subject_name = sname
     state.episode_title = nil
@@ -600,8 +606,12 @@ mp.register_script_message("bind-subject", function(sid, sname)
         local folder = utils.split_path(state.current_path)
         if folder then
             run_cli({ "bind", folder, sid, sname, state.episode and tostring(state.episode) or "" }, function(res)
-                if state.current_path ~= captured_path or state.subject_id ~= captured_sid then return end
-                local et = tostring(res and res.episode_title or ""):gsub("^%s+", ""):gsub("%s+$", "")
+                if bind_seq ~= state.match_seq or state.current_path ~= captured_path or state.subject_id ~= captured_sid then return end
+                if not res or not res.ok then
+                    mp.osd_message("目录关联保存失败：" .. tostring(res and res.error or "写入错误"), 3.0)
+                    return
+                end
+                local et = tostring(res.episode_title or ""):gsub("^%s+", ""):gsub("%s+$", "")
                 if et ~= "" then
                     state.episode_title = et
                     publish_match_info()
@@ -689,6 +699,8 @@ end)
 -- React to file load and uosc_danmaku automatic anime match
 mp.register_event("file-loaded", function()
     state.playback_seq = state.playback_seq + 1
+    state.match_seq = state.match_seq + 1
+    local load_match_seq = state.match_seq
     state.busy = false
     state.current_path = mp.get_property("path")
     state.subject_id = nil
@@ -703,6 +715,7 @@ mp.register_event("file-loaded", function()
     mp.set_property_native("user-data/bangumi_sync/match-info", nil)
     update_uosc_button()
     mp.add_timeout(0.8, function()
+        if load_match_seq ~= state.match_seq then return end
         match_current_file("")
     end)
 end)

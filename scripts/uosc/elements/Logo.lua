@@ -25,18 +25,19 @@ function Logo:render()
 	local r = round(50 * scale)
 
 	-- Soft layered porcelain elevation shadow
+	local sh_m = config.shadow_mult or 1.0
 	ass:circle(cx, cy + round(8 * scale), r + round(4 * scale), {
-		color = bgt,
-		opacity = 0.05,
+		color = config.color.shadow,
+		opacity = math.min(0.35, 0.05 * sh_m),
 	})
 	ass:circle(cx, cy + round(3 * scale), r + round(1 * scale), {
-		color = bgt,
-		opacity = 0.08,
+		color = config.color.shadow,
+		opacity = math.min(0.45, 0.08 * sh_m),
 	})
 
 	-- Pure frosted porcelain medallion (borderless smooth vector fill)
 	ass:circle(cx, cy, r, {
-		color = 'ffffff',
+		color = config.color.surface or 'ffffff',
 		opacity = 0.96,
 	})
 
@@ -78,8 +79,8 @@ function Logo:render()
 			cx - sub_w / 2 - pill_pad_x, pill_y + 1,
 			cx + sub_w / 2 + pill_pad_x, pill_y + pill_h + 1,
 			{
-				color = bgt,
-				opacity = 0.05,
+				color = config.color.shadow,
+				opacity = math.min(0.35, 0.05 * sh_m),
 				radius = math.floor(pill_h / 2),
 			}
 		)
@@ -87,7 +88,7 @@ function Logo:render()
 			cx - sub_w / 2 - pill_pad_x, pill_y,
 			cx + sub_w / 2 + pill_pad_x, pill_y + pill_h,
 			{
-				color = 'ffffff',
+				color = config.color.surface or 'ffffff',
 				opacity = 0.78,
 				radius = math.floor(pill_h / 2),
 			}

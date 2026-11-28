@@ -70,8 +70,8 @@ function PauseIndicator:render()
 	local cx, cy = display.width / 2, display.height / 2
 
 	ass:circle(cx, cy + round(2 * state.scale), radius, {
-		color = bgt,
-		opacity = 0.08 * self.opacity,
+		color = config.color.shadow,
+		opacity = math.min(0.45, 0.08 * (config.shadow_mult or 1.0)) * self.opacity,
 	})
 	ass:circle(cx, cy, radius, {
 		color = bg,

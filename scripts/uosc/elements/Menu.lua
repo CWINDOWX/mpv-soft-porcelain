@@ -1601,14 +1601,15 @@ function Menu:render()
 		-- Soft elevation shadow + porcelain card surface with hairline border
 		local card_radius = state.radius > 0 and math.min(state.radius + self.padding, state.radius * 2) or 0
 		if is_current then
+			local sh_m = config.shadow_mult or 1.0
 			ass:rect(bg_rect.ax - 2, bg_rect.ay + 6, bg_rect.bx + 2, bg_rect.by + 10, {
-				color = bgt,
-				opacity = menu_opacity * 0.06,
+				color = config.color.shadow,
+				opacity = math.min(0.45, menu_opacity * 0.06 * sh_m),
 				radius = card_radius + 2,
 			})
 			ass:rect(bg_rect.ax, bg_rect.ay + 2, bg_rect.bx, bg_rect.by + 4, {
-				color = bgt,
-				opacity = menu_opacity * 0.08,
+				color = config.color.shadow,
+				opacity = math.min(0.50, menu_opacity * 0.08 * sh_m),
 				radius = card_radius,
 			})
 		end

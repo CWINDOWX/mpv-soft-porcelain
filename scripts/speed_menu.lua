@@ -9,7 +9,7 @@ local mp = require("mp")
 local utils = require("mp.utils")
 local assdraw = require("mp.assdraw")
 
--- Soft Porcelain palette (ASS BGR hex)
+-- Theme palette (ASS BGR hex; updated live via user-data/porcelain/theme)
 local C_BG      = "FAF6F4" -- #F4F6FA porcelain card surface
 local C_WHITE   = "FFFFFF" -- #FFFFFF elevated chip/thumb
 local C_BGT     = "3B291E" -- #1E293B deep slate ink
@@ -17,6 +17,9 @@ local C_MUTED   = "8B7464" -- #64748B muted slate
 local C_TRACK   = "E1D5CB" -- #CBD5E1 soft slate track
 local C_FG      = "B87835" -- #3578B8 serene cerulean accent
 local C_FG_SOFT = "F3E6DA" -- #DAE6F3 pale sky tint
+local C_FGT     = "FFFFFF" -- #FFFFFF text/icon on primary accent
+local C_SHADOW  = "000000" -- pure dark drop shadow
+local C_SH_MULT = 1.0
 
 local MIN_SPEED = 0.25
 local MAX_SPEED = 4.0
@@ -232,8 +235,8 @@ local function render_panel()
     local ass = assdraw.ass_new()
 
     -- Soft elevation shadow
-    draw_rrect(ass, ax - 2, ay + round(5 * scale), bx + 2, by + round(9 * scale), card_r + 2, C_BGT, op * 0.08)
-    draw_rrect(ass, ax, ay + round(2 * scale), bx, by + round(4 * scale), card_r, C_BGT, op * 0.10)
+    draw_rrect(ass, ax - 2, ay + round(5 * scale), bx + 2, by + round(9 * scale), card_r + 2, C_SHADOW, math.min(0.45, op * 0.08 * C_SH_MULT))
+    draw_rrect(ass, ax, ay + round(2 * scale), bx, by + round(4 * scale), card_r, C_SHADOW, math.min(0.50, op * 0.10 * C_SH_MULT))
 
     -- Main frosted porcelain card (pure borderless vector fill)
     draw_rrect(ass, ax, ay, bx, by, card_r, C_BG, op * 0.96)
@@ -263,7 +266,7 @@ local function render_panel()
     local rst_hov = is_custom and (P.hover_id == "reset")
     local rst_bg = rst_hov and C_FG or C_WHITE
     local rst_bg_op = rst_hov and 0.96 or (is_custom and 0.94 or 0.45)
-    local rst_fg = rst_hov and C_WHITE or (is_custom and C_BGT or C_MUTED)
+    local rst_fg = rst_hov and C_FGT or (is_custom and C_BGT or C_MUTED)
     local rst_fg_op = is_custom and 1.0 or 0.45
 
     draw_rrect(ass, rst_rect.ax, rst_rect.ay, rst_rect.bx, rst_rect.by, round(7 * scale), rst_bg, op * rst_bg_op)
@@ -320,7 +323,7 @@ local function render_panel()
     -- Tactile borderless concentric thumb handle
     local r_now = slider_active and (thumb_r + round(1.5 * scale)) or thumb_r
     local ring_w = math.max(2.2, 2.5 * scale)
-    draw_circle(ass, fill_x, tr_cy + 1.2, r_now + 1.4, C_BGT, op * 0.13)
+    draw_circle(ass, fill_x, tr_cy + 1.2, r_now + 1.4, C_SHADOW, math.min(0.45, op * 0.13 * C_SH_MULT))
     draw_circle(ass, fill_x, tr_cy, r_now, C_FG, op * (slider_active and 1.0 or 0.95))
     draw_circle(ass, fill_x, tr_cy, math.max(2.5, r_now - ring_w), C_WHITE, op)
 
@@ -604,6 +607,20 @@ end)
 mp.observe_property("speed", "number", function(_, v)
     P.speed = v or 1
     update_uosc_button()
+    if P.open or P.opacity > 0.01 then render_panel() end
+end)
+mp.observe_property("user-data/porcelain/theme", "native", function(_, t)
+    if type(t) ~= "table" then return end
+    if t.bg then C_BG = t.bg end
+    if t.surface then C_WHITE = t.surface end
+    if t.bgt then C_BGT = t.bgt end
+    if t.muted then C_MUTED = t.muted end
+    if t.track then C_TRACK = t.track end
+    if t.fg then C_FG = t.fg end
+    if t.fg_soft then C_FG_SOFT = t.fg_soft end
+    if t.fgt then C_FGT = t.fgt end
+    if t.shadow then C_SHADOW = t.shadow end
+    if type(t.shadow_mult) == "number" then C_SH_MULT = t.shadow_mult end
     if P.open or P.opacity > 0.01 then render_panel() end
 end)
 mp.observe_property("user-data/uosc/menu/type", "native", function(_, val)

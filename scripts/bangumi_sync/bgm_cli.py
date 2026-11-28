@@ -254,7 +254,7 @@ def cmd_search(cfg_dir, keyword):
     out_json({"ok": True, "items": items})
 
 
-def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name, ep_num=None):
+def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name, ep_num=None, filepath=None):
     mp = os.path.join(cfg_dir, "bangumi-map.json")
     lock_path = os.path.join(cfg_dir, "_cache", "bangumi-map.lock")
     norm_key = os.path.normpath(folder_key).lower()
@@ -267,16 +267,38 @@ def cmd_bind_folder(cfg_dir, folder_key, subject_id, subject_name, ep_num=None):
         out_json({"ok": False, "error": str(e) or "写入关联映射失败"})
         return
 
-    ep_title = ""
+    resolved_ep = None
+    resolved_season = None
     if ep_num is not None and str(ep_num).strip() != "":
         try:
+            fval = float(str(ep_num).strip())
+            resolved_ep = int(fval) if fval.is_integer() else fval
+        except Exception:
+            resolved_ep = None
+
+    if resolved_ep is None and filepath and str(filepath).strip() != "":
+        try:
+            _, parsed_season, parsed_ep = parse_episode_and_title(filepath, subject_name or "")
+            resolved_ep = parsed_ep
+            resolved_season = parsed_season or 1
+        except Exception:
+            pass
+
+    ep_title = ""
+    if resolved_ep is not None:
+        try:
             auth = load_json(os.path.join(cfg_dir, "bangumi-auth.json"), {})
-            ep_obj, _ = get_episode_info(cfg_dir, subject_id, ep_num, auth.get("token"), allow_cache=True)
+            ep_obj, _ = get_episode_info(cfg_dir, subject_id, resolved_ep, auth.get("token"), allow_cache=True)
             ep_title = extract_ep_title(ep_obj)
         except Exception:
             ep_title = ""
 
-    out_json({"ok": True, "episode_title": ep_title})
+    out_json({
+        "ok": True,
+        "episode": resolved_ep,
+        "season": resolved_season,
+        "episode_title": ep_title,
+    })
 
 
 def extract_ep_title(ep_obj):
@@ -556,7 +578,8 @@ def main():
         cmd_search(cfg_dir, sys.argv[3])
     elif cmd == "bind" and len(sys.argv) >= 6:
         ep_arg = sys.argv[6] if len(sys.argv) >= 7 else None
-        cmd_bind_folder(cfg_dir, sys.argv[3], sys.argv[4], sys.argv[5], ep_arg)
+        fp_arg = sys.argv[7] if len(sys.argv) >= 8 else None
+        cmd_bind_folder(cfg_dir, sys.argv[3], sys.argv[4], sys.argv[5], ep_arg, fp_arg)
     elif cmd == "match" and len(sys.argv) >= 4:
         hint = sys.argv[4] if len(sys.argv) >= 5 else ""
         cmd_match(cfg_dir, sys.argv[3], hint)

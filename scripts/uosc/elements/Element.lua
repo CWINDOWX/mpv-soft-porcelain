@@ -106,6 +106,14 @@ function Element:get_visibility()
 		and Elements.curtain.render_order or 0
 	if self.render_order < min_order then return 0 end
 
+	-- Suppress hover pop-up of underlying HUD controls/timeline/volume while hovering a floating toast card
+	local controls_pinned = (Elements.menu and Elements.menu.keep_controls_visible) or state.keep_controls_visible
+	if state.toast_hovered and not controls_pinned
+		and (self.id == 'controls' or self.id == 'timeline' or self.id == 'volume'
+			or self.anchor_id == 'controls' or self.anchor_id == 'volume') then
+		return 0
+	end
+
 	-- Persistency
 	if self:is_persistent() then return 1 end
 

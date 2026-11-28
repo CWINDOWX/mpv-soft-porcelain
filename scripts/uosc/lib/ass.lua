@@ -131,8 +131,8 @@ function ass_mt:tooltip(element, value, opts)
 	-- Draw
 	local ax, ay, bx, by = round(x - width_half), round(y - height_half), round(x + width_half), round(y + height_half)
 	self:rect(ax, ay + 1, bx, by + 2, {
-		color = bgt,
-		opacity = 0.08 * config.opacity.tooltip,
+		color = config.color.shadow,
+		opacity = math.min(0.45, 0.08 * (config.shadow_mult or 1.0)) * config.opacity.tooltip,
 		radius = state.radius,
 	})
 	self:rect(ax, ay, bx, by, {

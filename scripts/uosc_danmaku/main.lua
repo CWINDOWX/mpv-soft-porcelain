@@ -63,33 +63,32 @@ local rebuild_convert_timer = nil
 
 function get_danmaku_visibility()
     local history_json = read_file(HISTORY_PATH)
-    local history
-    if history_json ~= nil then
-        history = utils.parse_json(history_json) or {}
-        local flag = history["show_danmaku"]
-        if flag == nil then
-            history["show_danmaku"] = true
-            write_json_file(HISTORY_PATH, history)
-            return true
+    if history_json ~= nil and history_json:match("%S") then
+        local history = utils.parse_json(history_json)
+        if type(history) == "table" then
+            local flag = history["show_danmaku"]
+            if flag ~= nil then
+                return flag
+            end
         else
-            return flag
+            return true
         end
-    else
-        history = {}
-        history["show_danmaku"] = true
-        write_json_file(HISTORY_PATH, history)
     end
+    update_json_file(HISTORY_PATH, function(history)
+        if history["show_danmaku"] == nil then
+            history["show_danmaku"] = true
+            return true
+        end
+        return false
+    end)
     return true
 end
 
 function set_danmaku_visibility(flag)
-    local history = {}
-    local history_json = read_file(HISTORY_PATH)
-    if history_json ~= nil then
-        history = utils.parse_json(history_json) or {}
-    end
-    history["show_danmaku"] = flag
-    write_json_file(HISTORY_PATH, history)
+    update_json_file(HISTORY_PATH, function(history)
+        history["show_danmaku"] = flag
+        return true
+    end)
 end
 
 function set_danmaku_button()
@@ -323,15 +322,16 @@ end
 
 local function clear_source()
     local path = mp.get_property("path")
-    local history_json = read_file(HISTORY_PATH)
+    if not path then return end
 
-    if not path or not history_json then return end
-
-    local history = utils.parse_json(history_json) or {}
-    if history[path] == nil then return end
-
-    history[path] = nil
-    write_json_file(HISTORY_PATH, history)
+    local existed = false
+    update_json_file(HISTORY_PATH, function(history)
+        if history[path] == nil then return false end
+        history[path] = nil
+        existed = true
+        return true
+    end)
+    if not existed then return end
 
     for url, source in pairs(DANMAKU.sources) do
         if source.from == "user_custom" then
@@ -371,90 +371,80 @@ function write_history(episodeid, api_server)
     end
 
     if dir ~= nil then
-        local history_json = read_file(HISTORY_PATH)
-        if history_json ~= nil then
-            history = utils.parse_json(history_json) or {}
-        end
-        history[dir] = {}
-        history[dir].fname = fname
-        history[dir].source = DANMAKU.source
-        history[dir].animeTitle = DANMAKU.anime
-        history[dir].episodeTitle = DANMAKU.episode
-        history[dir].episodeNumber = episodeNumber
-        if episodeid then
-            history[dir].episodeId = episodeid
-        elseif DANMAKU.extra then
-            history[dir].extra = DANMAKU.extra
-        end
-        if api_server then
-            history[dir].api_server = api_server
-        end
-        write_json_file(HISTORY_PATH, history)
+        update_json_file(HISTORY_PATH, function(history)
+            history[dir] = {}
+            history[dir].fname = fname
+            history[dir].source = DANMAKU.source
+            history[dir].animeTitle = DANMAKU.anime
+            history[dir].episodeTitle = DANMAKU.episode
+            history[dir].episodeNumber = episodeNumber
+            if episodeid then
+                history[dir].episodeId = episodeid
+            elseif DANMAKU.extra then
+                history[dir].extra = DANMAKU.extra
+            end
+            if api_server then
+                history[dir].api_server = api_server
+            end
+            return true
+        end)
     end
 end
 
 function remove_source_from_history(rm_source)
-    local history_json = read_file(HISTORY_PATH)
     local path = mp.get_property("path")
+    if not path then return end
 
     if is_protocol(path) then
         path = remove_query(path)
     end
 
-    if history_json then
-        local history = utils.parse_json(history_json) or {}
-
-        if history[path] ~= nil and history[path]["sources"] ~= nil then
-            for source in pairs(history[path]["sources"]) do
-                if source == rm_source then
-                    history[path]["sources"][source] = nil
-                    break
-                end
+    update_json_file(HISTORY_PATH, function(history)
+        if history[path] == nil or history[path]["sources"] == nil then
+            return false
+        end
+        for source in pairs(history[path]["sources"]) do
+            if source == rm_source then
+                history[path]["sources"][source] = nil
+                return true
             end
         end
-
-        write_json_file(HISTORY_PATH, history)
-    end
+        return false
+    end)
 end
 
 function add_source_to_history(add_url, add_source)
-    local history_json = read_file(HISTORY_PATH)
     local path = mp.get_property("path")
+    if not path then return end
 
     if is_protocol(path) then
         path = remove_query(path)
     end
 
-    local history = {}
-    if history_json then
-        history = utils.parse_json(history_json) or {}
-    end
-
-    history[path] = history[path] or {}
-    history[path]["sources"] = history[path]["sources"] or {}
-    history[path]["sources"][add_url] = history[path]["sources"][add_url] or {}
-
-    local record = history[path]["sources"][add_url]
-    record.from = add_source.from or "user_custom"
-    record.blocked = add_source.blocked or false
-    if record.from == "api_server" then
-        record.api_server = add_source.api_server or options.api_server
-    else
-        record.api_server = nil
-    end
-
-   local delay_segments = shallow_copy(add_source.delay_segments or {})
+    local delay_segments = shallow_copy(add_source.delay_segments or {})
+    local merged_segments = nil
     if #delay_segments > 0 then
-        record.delay_segments = merge_delay_segments(delay_segments)
-        if #record.delay_segments == 0 then
-            record.delay_segments = nil
-        end
-    else
-        record.delay_segments = nil
+        local m = merge_delay_segments(delay_segments)
+        if #m > 0 then merged_segments = m end
     end
 
-    record.delay = nil
-    write_json_file(HISTORY_PATH, history)
+    update_json_file(HISTORY_PATH, function(history)
+        history[path] = history[path] or {}
+        history[path]["sources"] = history[path]["sources"] or {}
+        history[path]["sources"][add_url] = history[path]["sources"][add_url] or {}
+
+        local record = history[path]["sources"][add_url]
+        record.from = add_source.from or "user_custom"
+        record.blocked = add_source.blocked or false
+        if record.from == "api_server" then
+            record.api_server = add_source.api_server or options.api_server
+        else
+            record.api_server = nil
+        end
+        record.delay_segments = merged_segments
+        record.delay = nil
+        return true
+    end)
 end
 
 function read_danmaku_source_record(path)
@@ -533,8 +523,13 @@ function read_danmaku_source_record(path)
         end
 
         if next(upgraded_sources) then
-            record.sources = upgraded_sources
-            write_json_file(HISTORY_PATH, history)
+            update_json_file(HISTORY_PATH, function(latest_history)
+                if type(latest_history[path]) == "table" then
+                    latest_history[path].sources = upgraded_sources
+                    return true
+                end
+                return false
+            end)
         end
     end
 end
@@ -950,7 +945,7 @@ mp.register_script_message("open_search_danmaku_menu", open_input_menu)
 mp.register_script_message("open_add_source_menu", open_add_menu)
 mp.register_script_message("open_add_total_menu", open_add_total_menu)
 mp.register_script_message("match-by-title", function(title, season, ep)
-    if not get_danmaku_visibility() then return end
+    if not options.auto_load or not get_danmaku_visibility() then return end
     if async_running or mp.get_property_bool(HAS_DANMAKU, false) or COMMENTS ~= nil then return end
     if type(match_anime_by_title) == "function" then
         ENABLED = true

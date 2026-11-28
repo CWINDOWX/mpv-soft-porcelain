@@ -194,7 +194,7 @@ function Timeline:render()
 		return
 	end
 
-	if self.proximity_raw <= 0 then
+	if self.proximity_raw <= 0 and visibility > 0 then
 		self.is_hovered = true
 	end
 	if visibility > 0 then
@@ -271,14 +271,14 @@ function Timeline:render()
 	-- Soft elevation shadow matching floating Controls dock when expanded
 	if visibility > 0 then
 		ass:rect(bax, bay + round(2 * state.scale), bbx, bby + round(3 * state.scale), {
-			color = bgt,
-			opacity = visibility * 0.09,
+			color = config.color.shadow,
+			opacity = math.min(0.48, visibility * 0.09 * (config.shadow_mult or 1.0)),
 			radius = pill_r,
 		})
 	end
 
 	-- Full-width smooth rounded porcelain track (drawn whole so zero AA seam at corners!)
-	local track_opacity = 0.52 + (math.max(config.opacity.timeline, 0.94) - 0.52) * visibility
+	local track_opacity = 0.72 + (math.max(config.opacity.timeline, 0.94) - 0.72) * visibility
 	ass:rect(bax, bay, bbx, bby, {
 		color = bg,
 		opacity = track_opacity,

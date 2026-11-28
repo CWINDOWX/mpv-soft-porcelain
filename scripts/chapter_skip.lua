@@ -55,6 +55,8 @@ local C_FG = "B87835"       -- #3578B8 serene cerulean
 local C_FGT = "FFFFFF"      -- #FFFFFF crisp white
 local C_MUTED = "8B7464"    -- #64748B slate muted
 local C_CLOSE = "5D45D6"    -- #D6455D muted coral hover
+local C_SHADOW = "000000"   -- pure dark drop shadow
+local C_SH_MULT = 1.0
 
 local function load_config()
     local f = io.open(STATE_PATH, "rb")
@@ -319,9 +321,9 @@ function render_prompt()
 
     -- Soft layered elevation shadow
     draw_round_rect(ass, ax - 1, ay + math.floor(4 * scale), bx + 1, by + math.floor(6 * scale),
-        radius + 1, C_BGT, op * 0.12, 0)
+        radius + 1, C_SHADOW, math.min(0.45, op * 0.12 * C_SH_MULT), 0)
     draw_round_rect(ass, ax, ay + math.floor(2 * scale), bx, by + math.floor(3 * scale),
-        radius, C_BGT, op * 0.10, 0)
+        radius, C_SHADOW, math.min(0.45, op * 0.10 * C_SH_MULT), 0)
 
     -- Main frosted porcelain pill body (borderless smooth fill)
     local main_bg = is_skip_hover and C_FG or C_BG
@@ -361,7 +363,7 @@ function render_prompt()
             math.floor(8 * scale), C_CLOSE, op * 0.92, 0)
     end
     draw_text(ass, split_x + close_w / 2 - math.floor(1 * scale), ay + pill_h / 2, 5, "close",
-        math.floor(16 * scale), is_close_hover and C_FGT or (is_skip_hover and C_FGT or C_MUTED),
+        math.floor(16 * scale), is_close_hover and "FFFFFF" or (is_skip_hover and C_FGT or C_MUTED),
         op * (is_close_hover and 1 or 0.85), false, "MaterialIconsRound-Regular")
 
     overlay.res_x = w
@@ -713,6 +715,18 @@ mp.observe_property("osd-width", "number", function(_, v)
 end)
 mp.observe_property("osd-height", "number", function(_, v)
     if v and v > 0 then runtime.osd_h = v; if runtime.prompt_visible then render_prompt() end end
+end)
+mp.observe_property("user-data/porcelain/theme", "native", function(_, t)
+    if type(t) ~= "table" then return end
+    if t.bg then C_BG = t.bg end
+    if t.bgt then C_BGT = t.bgt end
+    if t.fg then C_FG = t.fg end
+    if t.fgt then C_FGT = t.fgt end
+    if t.muted then C_MUTED = t.muted end
+    if t.error then C_CLOSE = t.error end
+    if t.shadow then C_SHADOW = t.shadow end
+    if type(t.shadow_mult) == "number" then C_SH_MULT = t.shadow_mult end
+    if runtime.prompt_visible then render_prompt() end
 end)
 mp.observe_property("mouse-pos", "native", function(_, pos)
     if type(pos) == "table" and pos.x and pos.y then

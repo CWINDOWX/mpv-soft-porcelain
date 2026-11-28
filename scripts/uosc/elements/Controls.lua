@@ -480,15 +480,16 @@ function Controls:render()
 	local dock_radius = state.radius + round(4 * state.scale)
 
 	-- Soft elevation shadow under floating porcelain control dock
+	local sh_m = config.shadow_mult or 1.0
 	ass:rect(dax, day + round(2 * state.scale), dbx, dby + round(3 * state.scale), {
-		color = bgt,
-		opacity = visibility * 0.09,
+		color = config.color.shadow,
+		opacity = math.min(0.48, visibility * 0.09 * sh_m),
 		radius = dock_radius,
 	})
 	-- Frosted porcelain floating dock container framing all bottom controls cleanly
 	ass:rect(dax, day, dbx, dby, {
 		color = bg,
-		opacity = visibility * 0.66,
+		opacity = visibility * 0.80,
 		radius = dock_radius,
 	})
 	return ass

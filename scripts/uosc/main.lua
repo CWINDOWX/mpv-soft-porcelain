@@ -161,6 +161,9 @@ local config_defaults = {
 		foreground_text = serialize_rgba('000000').color,
 		background = serialize_rgba('000000').color,
 		background_text = serialize_rgba('ffffff').color,
+		surface = serialize_rgba('ffffff').color,
+		surface_hover = serialize_rgba('eaf1f8').color,
+		shadow = serialize_rgba('000000').color,
 		curtain = serialize_rgba('000000').color,
 		success = serialize_rgba('a5e075').color,
 		error = serialize_rgba('ff616e').color,
@@ -254,6 +257,7 @@ config = {
 	end)(),
 	color = table_copy(config_defaults.color),
 	opacity = table_copy(config_defaults.opacity),
+	shadow_mult = 1.0,
 	cursor_leave_fadeout_elements = {'timeline', 'volume', 'top_bar', 'controls'},
 	timeline_step = 1,
 	timeline_step_flag = '',
@@ -441,6 +445,7 @@ state = {
 	radius = 0,
 	idlescreen = options.idlescreen,
 	idlemsg = options.idlemsg,
+	toast_hovered = false,
 }
 buttons = require('lib/buttons')
 thumbnail = {width = 0, height = 0, disabled = false}
@@ -814,6 +819,10 @@ mp.observe_property('display-fps', 'native', observe_display_fps)
 mp.observe_property('estimated-display-fps', 'native', update_render_delay)
 mp.observe_property('eof-reached', 'native', create_state_setter('eof_reached'))
 mp.observe_property('core-idle', 'native', create_state_setter('core_idle'))
+mp.observe_property('user-data/uosc/toast-hovered', 'bool', function(_, val)
+	state.toast_hovered = val == true
+	request_render()
+end)
 
 --[[ KEY BINDS ]]
 
@@ -1318,3 +1327,24 @@ if options.custom_font == 'default' then
 		end
 	end)
 end
+
+-- Live multi-theme palette sync from theme_picker.lua
+mp.observe_property('user-data/porcelain/theme', 'native', function(_, t)
+	if type(t) ~= 'table' then return end
+	if t.fg then config.color.foreground = t.fg end
+	if t.fgt then config.color.foreground_text = t.fgt end
+	if t.bg then config.color.background = t.bg end
+	if t.bgt then config.color.background_text = t.bgt end
+	if t.surface then config.color.surface = t.surface end
+	if t.surface_hover then config.color.surface_hover = t.surface_hover end
+	if t.curtain then config.color.curtain = t.curtain end
+	if t.shadow then config.color.shadow = t.shadow end
+	if type(t.shadow_mult) == 'number' then config.shadow_mult = t.shadow_mult end
+	if t.success then config.color.success = t.success end
+	if t.error then config.color.error = t.error end
+	if t.match then config.color.match = t.match end
+	if t.heatmap then config.color.heatmap = t.heatmap end
+	fg, bg = config.color.foreground, config.color.background
+	fgt, bgt = config.color.foreground_text, config.color.background_text
+	request_render()
+end)

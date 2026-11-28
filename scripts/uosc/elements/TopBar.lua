@@ -34,7 +34,7 @@ function TopBar:init()
 		end
 	end
 
-	local close = {icon = 'close', hover_bg = '5d45d6', hover_fg = 'ffffff', command = function() mp.command('quit') end}
+	local close = {icon = 'close', is_close = true, hover_fg = 'ffffff', command = function() mp.command('quit') end}
 	local max = {icon = 'crop_square', command = maximized_command}
 	local min = {icon = 'minimize', command = function() mp.command('cycle window-minimized') end}
 	self.buttons = options.top_bar_controls == 'left' and {close, max, min} or {min, max, close}
@@ -434,7 +434,8 @@ function TopBar:render()
 			local is_hover = get_point_to_rectangle_proximity(cursor, rect) <= 0
 			local opacity = is_hover and 0.96 or (is_framed and 0.92 or config.opacity.controls)
 			local button_fg = is_hover and (button.hover_fg or fgt) or bgt
-			local button_bg = is_hover and (button.hover_bg or fg) or (is_framed and 'ffffff' or bg)
+			local button_bg = is_hover and (button.is_close and config.color.error or button.hover_bg or fg)
+				or (is_framed and (config.color.surface or bg) or bg)
 			local icon_name = (button.icon == 'crop_square' and state.maximized) and 'filter_none' or button.icon
 
 			cursor:zone('primary_down', rect, button.command)
@@ -447,8 +448,8 @@ function TopBar:render()
 
 			if not is_hover and is_framed then
 				ass:rect(bg_ax, bg_ay + 1, bg_bx, bg_by + 1, {
-					color = bgt,
-					opacity = visibility * 0.06,
+					color = config.color.shadow,
+					opacity = math.min(0.35, visibility * 0.06 * (config.shadow_mult or 1.0)),
 					radius = btn_radius,
 				})
 			end
@@ -531,12 +532,12 @@ function TopBar:render()
 					cursor:zone('primary_down', title_rect, function() self:toggle_title() end)
 				end
 
-				local pill_fill = (is_title_hover and self.recognized_title) and 'f8f1ea'
-					or (is_framed and 'ffffff' or bg)
+				local pill_fill = (is_title_hover and self.recognized_title) and (config.color.surface_hover or bg)
+					or (is_framed and (config.color.surface or bg) or bg)
 				if is_framed then
 					ass:rect(title_rect.ax, title_rect.ay + 1, title_rect.bx, title_rect.by + 1, {
-						color = bgt,
-						opacity = visibility * 0.06,
+						color = config.color.shadow,
+						opacity = math.min(0.35, visibility * 0.06 * (config.shadow_mult or 1.0)),
 						radius = state.radius,
 					})
 				end

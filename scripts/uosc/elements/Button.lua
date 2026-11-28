@@ -15,8 +15,8 @@ function Button:init(id, props)
 	self.active = props.active
 	self.tooltip = props.tooltip
 	self.badge = props.badge
-	self.foreground = props.foreground or fg
-	self.background = props.background or bg
+	self.foreground = props.foreground
+	self.background = props.background
 	self.is_clickable = true
 	---@type fun()|nil
 	self.on_click = props.on_click
@@ -46,7 +46,9 @@ function Button:render()
 	-- Soft Porcelain pill styling (pure borderless vector fill for crisp smooth corners):
 	-- Resting: frosted porcelain fill (bg) + crisp slate ink icon (bgt)
 	-- Hover / Active: solid cerulean fill (fg) + crisp white icon (fgt), zero white halo/border
-	local pill_color = is_lit and self.foreground or self.background
+	local btn_fg = self.foreground or fg
+	local btn_bg = self.background or bg
+	local pill_color = is_lit and btn_fg or btn_bg
 	local icon_color = is_lit and fgt or bgt
 	local pill_opacity = self.active and (is_hover and 1 or 0.96)
 		or (is_hover and is_clickable and 0.96 or config.opacity.controls)
@@ -67,8 +69,8 @@ function Button:render()
 	local icon_clip
 	local icon_offset_y = 0
 	if self.badge then
-		local badge_bg = is_lit and fgt or self.foreground
-		local badge_fg = is_lit and self.foreground or fgt
+		local badge_bg = is_lit and fgt or btn_fg
+		local badge_fg = is_lit and btn_fg or fgt
 		local badge_font_size = math.max(8, round(self.font_size * 0.42))
 		local badge_opts = {size = badge_font_size, color = badge_fg, bold = true, opacity = visibility}
 		local badge_width = text_width(self.badge, badge_opts)

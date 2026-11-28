@@ -8,7 +8,7 @@
 local mp = require("mp")
 local assdraw = require("mp.assdraw")
 
--- Soft Porcelain palette (ASS BGR hex)
+-- Theme palette (ASS BGR hex; updated live via user-data/porcelain/theme)
 local C_BG       = "FAF6F4" -- #F4F6FA porcelain card surface
 local C_WHITE    = "FFFFFF" -- #FFFFFF elevated chip/thumb
 local C_BGT      = "3B291E" -- #1E293B deep slate ink
@@ -16,7 +16,10 @@ local C_MUTED    = "8B7464" -- #64748B muted slate
 local C_TRACK    = "E1D5CB" -- #CBD5E1 soft slate track
 local C_FG       = "B87835" -- #3578B8 serene cerulean accent
 local C_FG_SOFT  = "F3E6DA" -- #DAE6F3 pale sky tint
+local C_FGT      = "FFFFFF" -- #FFFFFF text/icon on primary accent
 local C_CLOSE    = "5D45D6" -- #D6455D coral close hover
+local C_SHADOW   = "000000" -- pure dark drop shadow
+local C_SH_MULT  = 1.0
 
 local panel_overlay = mp.create_osd_overlay("ass-events")
 panel_overlay.z = 2200
@@ -411,9 +414,9 @@ local function render_panel()
 
     -- Soft elevation shadow
     draw_rrect(ass, ax - 2, ay + math.floor(6 * scale), bx + 2, by + math.floor(10 * scale),
-        card_r + 2, C_BGT, op * 0.08, 0)
+        card_r + 2, C_SHADOW, math.min(0.45, op * 0.08 * C_SH_MULT), 0)
     draw_rrect(ass, ax, ay + math.floor(2 * scale), bx, by + math.floor(4 * scale),
-        card_r, C_BGT, op * 0.10, 0)
+        card_r, C_SHADOW, math.min(0.50, op * 0.10 * C_SH_MULT), 0)
 
     -- Main frosted porcelain studio card (borderless smooth vector fill)
     draw_rrect(ass, ax, ay, bx, by, card_r, C_BG, op * 0.96, 0)
@@ -434,7 +437,7 @@ local function render_panel()
     draw_rrect(ass, close_rect.ax, close_rect.ay, close_rect.bx, close_rect.by, math.floor(8 * scale),
         close_hov and C_CLOSE or C_WHITE, op * (close_hov and 0.96 or 0.92), 0)
     draw_txt(ass, (close_rect.ax + close_rect.bx) / 2, (close_rect.ay + close_rect.by) / 2, 5, "close",
-        math.floor(16 * scale), close_hov and C_WHITE or C_MUTED, op, false, "MaterialIconsRound-Regular")
+        math.floor(16 * scale), close_hov and "FFFFFF" or C_MUTED, op, false, "MaterialIconsRound-Regular")
     table.insert(P.hitboxes, { id = "btn_close", kind = "button", rect = close_rect, on_click = function() close_danmaku_style_panel() end })
 
     y = y + header_h + math.floor(4 * scale)
@@ -454,7 +457,7 @@ local function render_panel()
         draw_rrect(ass, prect.ax, prect.ay, prect.bx, prect.by, math.floor(8 * scale),
             hov and C_FG or C_WHITE, op * (hov and 0.96 or 0.94), 0)
         draw_txt(ass, (prect.ax + prect.bx) / 2, (prect.ay + prect.by) / 2, 5, pr.label,
-            math.floor(12.5 * scale), hov and C_WHITE or C_BGT, op, hov)
+            math.floor(12.5 * scale), hov and C_FGT or C_BGT, op, hov)
         table.insert(P.hitboxes, {
             id = pid, kind = "button", rect = prect,
             on_click = function()
@@ -511,8 +514,8 @@ local function render_panel()
                 if sp.tag then
                     local align = (st <= 0.06) and 7 or ((st >= 0.94) and 9 or 8)
                     draw_txt(ass, sx, tr_cy + math.floor(9 * scale), align, sp.tag,
-                        math.floor(10.5 * scale), snapped_here and C_FG or C_MUTED,
-                        op * (snapped_here and 1.0 or 0.78), snapped_here)
+                        math.max(11, math.floor(11.5 * scale)), snapped_here and C_FG or C_MUTED,
+                        op * (snapped_here and 1.0 or 0.82), snapped_here)
                 end
             end
         end
@@ -520,7 +523,7 @@ local function render_panel()
         -- Tactile thumb handle (concentric borderless fills for ultra-smooth anti-aliasing)
         local r_now = is_active and (thumb_r + math.floor(1.5 * scale)) or thumb_r
         local ring_w = math.max(2, 2.2 * scale)
-        draw_circle(ass, fill_x, tr_cy + 1, r_now + 1.2, C_BGT, op * 0.12, 0)
+        draw_circle(ass, fill_x, tr_cy + 1, r_now + 1.2, C_SHADOW, math.min(0.45, op * 0.12 * C_SH_MULT), 0)
         draw_circle(ass, fill_x, tr_cy, r_now, C_FG, op * (is_active and 1.0 or 0.94), 0)
         draw_circle(ass, fill_x, tr_cy, math.max(2, r_now - ring_w), C_WHITE, op, 0)
 
@@ -572,7 +575,7 @@ local function render_panel()
         draw_rrect(ass, frect.ax, frect.ay, frect.bx, frect.by, math.floor(8 * scale),
             active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.96, 0)
         draw_txt(ass, (frect.ax + frect.bx) / 2, (frect.ay + frect.by) / 2, 5, fn.label,
-            math.floor(12 * scale), active and C_WHITE or C_BGT, op, active)
+            math.floor(12 * scale), active and C_FGT or C_BGT, op, active)
         table.insert(P.hitboxes, {
             id = fid, kind = "button", rect = frect,
             on_click = function()
@@ -623,7 +626,7 @@ local function render_panel()
         draw_rrect(ass, trect.ax, trect.ay, trect.bx, trect.by, math.floor(8 * scale),
             tg.active and C_FG or (hov and C_FG_SOFT or C_WHITE), op * 0.96, 0)
         draw_txt(ass, (trect.ax + trect.bx) / 2, (trect.ay + trect.by) / 2, 5, tg.label,
-            math.floor(11.8 * scale), tg.active and C_WHITE or C_BGT, op, tg.active)
+            math.floor(11.8 * scale), tg.active and C_FGT or C_BGT, op, tg.active)
         table.insert(P.hitboxes, {
             id = tg.id, kind = "button", rect = trect,
             on_click = function() tg.click(); render_panel() end
@@ -656,7 +659,7 @@ local function render_panel()
     draw_rrect(ass, rst_rect.ax, rst_rect.ay, rst_rect.bx, rst_rect.by, math.floor(8 * scale),
         rst_hov and C_FG or C_WHITE, op * 0.96, 0)
     draw_txt(ass, (rst_rect.ax + rst_rect.bx) / 2, (rst_rect.ay + rst_rect.by) / 2, 5, "恢复默认",
-        math.floor(12 * scale), rst_hov and C_WHITE or C_MUTED, op, rst_hov)
+        math.floor(12 * scale), rst_hov and C_FGT or C_MUTED, op, rst_hov)
     table.insert(P.hitboxes, {
         id = "btn_reset", kind = "button", rect = rst_rect,
         on_click = function()
@@ -899,6 +902,21 @@ end)
 mp.observe_property("video-margin-ratio-bottom", "number", function(_, v)
     P.margin_bottom = v or 0
     if P.open then render_panel() end
+end)
+mp.observe_property("user-data/porcelain/theme", "native", function(_, t)
+    if type(t) ~= "table" then return end
+    if t.bg then C_BG = t.bg end
+    if t.surface then C_WHITE = t.surface end
+    if t.bgt then C_BGT = t.bgt end
+    if t.muted then C_MUTED = t.muted end
+    if t.track then C_TRACK = t.track end
+    if t.fg then C_FG = t.fg end
+    if t.fg_soft then C_FG_SOFT = t.fg_soft end
+    if t.fgt then C_FGT = t.fgt end
+    if t.error then C_CLOSE = t.error end
+    if t.shadow then C_SHADOW = t.shadow end
+    if type(t.shadow_mult) == "number" then C_SH_MULT = t.shadow_mult end
+    if P.open or P.opacity > 0.01 then render_panel() end
 end)
 mp.observe_property("user-data/uosc/menu/type", "native", function(_, val)
     if P.open and val ~= nil and val ~= "" and val ~= P.prev_menu_type then

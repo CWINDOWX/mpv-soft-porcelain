@@ -454,13 +454,130 @@ function title_replace(title)
     return title
 end
 
-function write_json_file(file_path, data)
-    local file = io.open(file_path, "w")
-    if not file then
-        return
+local _win_ffi_inited = false
+local _win_ffi = nil
+
+local function get_win_ffi()
+    if _win_ffi_inited then return _win_ffi end
+    _win_ffi_inited = true
+    if PLATFORM ~= "windows" then return nil end
+    local ok, ffi = pcall(require, "ffi")
+    if not ok or not ffi then return nil end
+    pcall(ffi.cdef, [[
+        int MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags, const char* lpMultiByteStr, int cbMultiByte, wchar_t* lpWideCharStr, int cchWideChar);
+        int MoveFileExW(const wchar_t* lpExistingFileName, const wchar_t* lpNewFileName, unsigned long dwFlags);
+        void* CreateFileW(const wchar_t* lpFileName, unsigned long dwDesiredAccess, unsigned long dwShareMode, void* lpSecurityAttributes, unsigned long dwCreationDisposition, unsigned long dwFlagsAndAttributes, void* hTemplateFile);
+        int CloseHandle(void* hObject);
+        int DeleteFileW(const wchar_t* lpFileName);
+        void Sleep(unsigned long dwMilliseconds);
+    ]])
+    _win_ffi = ffi
+    return _win_ffi
+end
+
+local function utf8_to_wide(ffi, str)
+    local len = ffi.C.MultiByteToWideChar(65001, 0, str, -1, nil, 0)
+    if len <= 0 then return nil end
+    local buf = ffi.new("wchar_t[?]", len)
+    if ffi.C.MultiByteToWideChar(65001, 0, str, -1, buf, len) <= 0 then return nil end
+    return buf
+end
+
+local function atomic_replace_file(src_path, dst_path)
+    local ffi = get_win_ffi()
+    if ffi then
+        local wsrc = utf8_to_wide(ffi, src_path)
+        local wdst = utf8_to_wide(ffi, dst_path)
+        if wsrc and wdst then
+            -- MOVEFILE_REPLACE_EXISTING (0x1) | MOVEFILE_WRITE_THROUGH (0x8)
+            local ok = ffi.C.MoveFileExW(wsrc, wdst, 9)
+            if ok ~= 0 then return true end
+        end
     end
-    file:write(utils.format_json(data)) -- 将 Lua 表转换为 JSON 并写入
-    file:close()
+    local ok = os.rename(src_path, dst_path)
+    if ok then return true end
+    return false
+end
+
+local function acquire_file_lock(lock_path)
+    local ffi = get_win_ffi()
+    if not ffi then return nil end
+    local wlock = utf8_to_wide(ffi, lock_path)
+    if not wlock then return nil end
+    local INVALID_HANDLE = ffi.cast("void*", -1)
+    for attempt = 1, 50 do
+        -- GENERIC_WRITE (0x40000000), share=0, CREATE_NEW (1), FILE_ATTRIBUTE_TEMPORARY (0x100)
+        local h = ffi.C.CreateFileW(wlock, 0x40000000, 0, nil, 1, 0x100, nil)
+        if h ~= INVALID_HANDLE and h ~= nil then
+            ffi.C.CloseHandle(h)
+            return function()
+                ffi.C.DeleteFileW(wlock)
+            end
+        end
+        -- Clear stale lock left by a crashed process (> 3 seconds old)
+        if attempt == 20 then
+            local info = utils.file_info(lock_path)
+            if info and info.mtime and (os.time() - info.mtime) >= 3 then
+                ffi.C.DeleteFileW(wlock)
+            end
+        end
+        ffi.C.Sleep(6)
+    end
+    return nil
+end
+
+function write_json_file(file_path, data)
+    local payload = utils.format_json(data)
+    if not payload then return false end
+    local pid = mp.get_property_number("pid", 0) or 0
+    local stamp = math.floor((mp.get_time() or 0) * 1000000)
+    local tmp_path = string.format("%s.tmp.%d.%d", file_path, pid, stamp)
+    local file = io.open(tmp_path, "wb")
+    if file then
+        local ok_w = file:write(payload)
+        file:flush()
+        file:close()
+        if ok_w and atomic_replace_file(tmp_path, file_path) then
+            return true
+        end
+        os.remove(tmp_path)
+    end
+    -- Fallback direct write only if temp/rename failed
+    local direct = io.open(file_path, "wb")
+    if not direct then return false end
+    direct:write(payload)
+    direct:close()
+    return true
+end
+
+-- Read-modify-write JSON file under a cross-process lock with corruption protection & atomic replace
+function update_json_file(file_path, mutator)
+    local unlock = acquire_file_lock(file_path .. ".lock")
+    local ok, result = pcall(function()
+        local raw = read_file(file_path)
+        local data
+        if raw ~= nil and raw:match("%S") then
+            local parsed = utils.parse_json(raw)
+            if type(parsed) ~= "table" then
+                msg.warn("JSON 文件解析失败，已保留原件以避免数据丢失: " .. tostring(file_path))
+                return false
+            end
+            data = parsed
+        else
+            data = {}
+        end
+        local should_write = mutator(data)
+        if should_write == false then
+            return true
+        end
+        return write_json_file(file_path, data)
+    end)
+    if unlock then unlock() end
+    if not ok then
+        msg.warn("更新 JSON 文件失败: " .. tostring(result))
+        return false
+    end
+    return result
 end
 
 -- 拆分字符串中的字符和数字
